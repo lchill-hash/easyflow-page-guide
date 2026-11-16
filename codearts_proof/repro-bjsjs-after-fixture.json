@@ -1,0 +1,340 @@
+{
+  "label": "after-fixture",
+  "verificationMode": "local-fixture-reproduction",
+  "isRealSiteAcceptance": false,
+  "note": "本地原始条目夹具全链路；不是访问真实网站，也不是真实网站验收。",
+  "fixtureSource": "scripts/fixtures/bjsjs-captured-items.json",
+  "capturedAt": "2026-11-13T11:16:56.167Z",
+  "sourceUrl": "https://www.bjsjs.gov.cn/gongkai/zwgkpd/ztzl/2024/wqfw/lnrzq/cjcs/202402/t20240229_79299.shtml",
+  "savedTopic": "高龄津贴",
+  "simulatedStateLastObject": "高龄津贴",
+  "materialTopic": "高龄津贴",
+  "itemCount": 26,
+  "segmentCount": 5,
+  "relevantItems": [
+    {
+      "elementId": "ef-p-1",
+      "type": "paragraph",
+      "tagName": "p",
+      "text": "日期:2026-01-26 09:16 来源:北京市民政局",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > p:nth-of-type(1)",
+      "titleCandidate": false,
+      "order": 2
+    },
+    {
+      "elementId": "ef-p-2",
+      "type": "paragraph",
+      "tagName": "p",
+      "text": "办理条件：",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > p:nth-of-type(1)",
+      "titleCandidate": true,
+      "order": 3
+    },
+    {
+      "elementId": "ef-p-3",
+      "type": "paragraph",
+      "tagName": "div",
+      "text": "具有本市户籍，且年满80周岁及以上的老年人可申请办理高龄老年人津贴。",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1)",
+      "titleCandidate": false,
+      "order": 4
+    },
+    {
+      "elementId": "ef-p-4",
+      "type": "paragraph",
+      "tagName": "div",
+      "text": "办理流程：",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3)",
+      "titleCandidate": true,
+      "order": 5
+    },
+    {
+      "elementId": "ef-p-7",
+      "type": "paragraph",
+      "tagName": "div",
+      "text": "网上申请：申请人可登录北京市政务服务网、北京市民政局官方网站或微信公众号，输入姓名和身份证号码后填报申请。",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(6)",
+      "titleCandidate": false,
+      "order": 8
+    },
+    {
+      "elementId": "ef-p-8",
+      "type": "paragraph",
+      "tagName": "div",
+      "text": "现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。或在社区(村)或街道(乡镇)领取并填写《北京市老年人养老服务补贴津贴申请表》后，到户籍所在地街道(乡镇)社会救助或“一门受理”窗口出示居民身份证或户口簿原件后提交。",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(7)",
+      "titleCandidate": false,
+      "order": 9
+    },
+    {
+      "elementId": "ef-p-11",
+      "type": "paragraph",
+      "tagName": "div",
+      "text": "各街道(乡镇)受理窗口通过综合管理平台接受申请，或现场确认申请材料后将信息归集至综合管理平台的北京市老年人养老服务补贴津贴管理系统；原则上于接收当日转街道(乡镇)负责民政业务的科室，由其进行初审后从系统转报区民政局。每月20日前，各街道(乡镇)将有异议的人员数据汇总报送区民政局。",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(10)",
+      "titleCandidate": false,
+      "order": 12
+    },
+    {
+      "elementId": "ef-p-12",
+      "type": "paragraph",
+      "tagName": "div",
+      "text": "区民政局于每月25日前作出审定意见。审定不合格的，提出意见并通过街道(乡镇)受理申请窗口书面告知当事人，说明理由、救济途径及时限，并将申请材料电子归档、妥善保存；审定合格的，报区财政局拨付资金。",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(11)",
+      "titleCandidate": false,
+      "order": 13
+    },
+    {
+      "elementId": "ef-p-19",
+      "type": "paragraph",
+      "tagName": "div",
+      "text": "发放标准：",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(19)",
+      "titleCandidate": true,
+      "order": 20
+    }
+  ],
+  "relevantSegments": [
+    {
+      "segmentId": "seg-3",
+      "titleText": "办理条件：",
+      "hasBody": true,
+      "bodyTexts": [
+        "具有本市户籍，且年满80周岁及以上的老年人可申请办理高龄老年人津贴。"
+      ],
+      "textLength": 40,
+      "orderRange": [
+        3,
+        4
+      ]
+    },
+    {
+      "segmentId": "seg-4",
+      "titleText": "办理流程：",
+      "hasBody": true,
+      "bodyTexts": [
+        "1、提出申请",
+        "由符合申请条件的老年人本人或其委托代理人，或监护人通过以下两种方式自愿申请：",
+        "网上申请：申请人可登录北京市政务服务网、北京市民政局官方网站或微信公众号，输入姓名和身份证号码后填报申请。",
+        "现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。或在社区(村)或街道(乡镇)领取并填写《北京市老年人养老服务补贴津贴申请表》后，到户籍所在地街道(乡镇)社会救助或“一门受理”窗口出示居民身份证或户口簿原件后提交。",
+        "注：在2019年10月25日前尚未提出申请的，由北京市社会福利综合管理平台通过老年人预留的手机号码推送养老服务津贴发放通知，确认回复后，综合管理平台直接生成并发放津贴至老年人持有的银行账户。",
+        "2、审核",
+        "各街道(乡镇)受理窗口通过综合管理平台接受申请，或现场确认申请材料后将信息归集至综合管理平台的北京市老年人养老服务补贴津贴管理系统；原则上于接收当日转街道(乡镇)负责民政业务的科室，由其进行初审后从系统转报区民政局。每月20日前，各街道(乡镇)将有异议的人员数据汇总报送区民政局。"
+      ],
+      "textLength": 472,
+      "orderRange": [
+        5,
+        12
+      ]
+    },
+    {
+      "segmentId": "seg-5",
+      "titleText": "发放标准：",
+      "hasBody": true,
+      "bodyTexts": [
+        "80周岁至89周岁的老年人，津贴标准为每人每月100元。",
+        "90周岁至99周岁的老年人，津贴标准为每人每月500元。",
+        "100周岁及以上的老年人，津贴标准为每人每月800元。",
+        "4、复核",
+        "老年人养老服务津贴的复核采取区民政局通过综合管理平台定期复核，至少每季度一次；或者由个人自主申报复核。"
+      ],
+      "textLength": 148,
+      "orderRange": [
+        20,
+        25
+      ]
+    }
+  ],
+  "q1": {
+    "query": "高龄津贴谁能申请 高龄津贴 条件 资格 对象",
+    "hits": [
+      {
+        "segmentId": "seg-3",
+        "titleText": "办理条件：",
+        "score": 2.7,
+        "matchedKeywords": [
+          "高龄",
+          "津贴",
+          "申请"
+        ],
+        "bodyTexts": [
+          "具有本市户籍，且年满80周岁及以上的老年人可申请办理高龄老年人津贴。"
+        ]
+      }
+    ],
+    "answer": {
+      "responseType": "direct-answer",
+      "text": "页面写明：具有本市户籍，且年满80周岁及以上的老年人可申请办理高龄老年人津贴。",
+      "citations": [
+        {
+          "role": "title",
+          "text": "办理条件：",
+          "elementId": "ef-p-2"
+        },
+        {
+          "role": "body",
+          "text": "具有本市户籍，且年满80周岁及以上的老年人可申请办理高龄老年人津贴。",
+          "elementId": "ef-p-3"
+        }
+      ],
+      "validation": {
+        "status": "passed"
+      }
+    }
+  },
+  "q2": {
+    "query": "那办理 高龄津贴 办理流程 步骤 方式 网上申请 现场申请 办理",
+    "hits": [
+      {
+        "segmentId": "seg-4",
+        "titleText": "办理流程：",
+        "score": 2.7,
+        "matchedKeywords": [
+          "办理流程",
+          "请现场申",
+          "申请现场"
+        ],
+        "bodyTexts": [
+          "1、提出申请",
+          "由符合申请条件的老年人本人或其委托代理人，或监护人通过以下两种方式自愿申请：",
+          "网上申请：申请人可登录北京市政务服务网、北京市民政局官方网站或微信公众号，输入姓名和身份证号码后填报申请。",
+          "现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。或在社区(村)或街道(乡镇)领取并填写《北京市老年人养老服务补贴津贴申请表》后，到户籍所在地街道(乡镇)社会救助或“一门受理”窗口出示居民身份证或户口簿原件后提交。",
+          "注：在2019年10月25日前尚未提出申请的，由北京市社会福利综合管理平台通过老年人预留的手机号码推送养老服务津贴发放通知，确认回复后，综合管理平台直接生成并发放津贴至老年人持有的银行账户。",
+          "2、审核",
+          "各街道(乡镇)受理窗口通过综合管理平台接受申请，或现场确认申请材料后将信息归集至综合管理平台的北京市老年人养老服务补贴津贴管理系统；原则上于接收当日转街道(乡镇)负责民政业务的科室，由其进行初审后从系统转报区民政局。每月20日前，各街道(乡镇)将有异议的人员数据汇总报送区民政局。"
+        ]
+      }
+    ],
+    "answer": {
+      "responseType": "direct-answer",
+      "text": "页面写明：现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。网上申请：申请人可登录北京市政务服务网、北京市民政局官方网站或微信公众号，输入姓名和身份证号码后填报申请。",
+      "citations": [
+        {
+          "role": "title",
+          "text": "办理流程：",
+          "elementId": "ef-p-4"
+        },
+        {
+          "role": "body",
+          "text": "现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。",
+          "elementId": "ef-p-8"
+        },
+        {
+          "role": "body",
+          "text": "网上申请：申请人可登录北京市政务服务网、北京市民政局官方网站或微信公众号，输入姓名和身份证号码后填报申请。",
+          "elementId": "ef-p-7"
+        }
+      ],
+      "validation": {
+        "status": "passed"
+      }
+    }
+  },
+  "legacyQ2": {
+    "query": "那办理 高龄津贴 办理流程 步骤 方式 网上申请 现场申请 办理",
+    "hits": [
+      {
+        "segmentId": "seg-4",
+        "titleText": "办理流程：",
+        "score": 2.7,
+        "matchedKeywords": [
+          "办理流程",
+          "请现场申",
+          "申请现场"
+        ],
+        "bodyTexts": [
+          "1、提出申请",
+          "由符合申请条件的老年人本人或其委托代理人，或监护人通过以下两种方式自愿申请：",
+          "网上申请：申请人可登录北京市政务服务网、北京市民政局官方网站或微信公众号，输入姓名和身份证号码后填报申请。",
+          "现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。或在社区(村)或街道(乡镇)领取并填写《北京市老年人养老服务补贴津贴申请表》后，到户籍所在地街道(乡镇)社会救助或“一门受理”窗口出示居民身份证或户口簿原件后提交。",
+          "注：在2019年10月25日前尚未提出申请的，由北京市社会福利综合管理平台通过老年人预留的手机号码推送养老服务津贴发放通知，确认回复后，综合管理平台直接生成并发放津贴至老年人持有的银行账户。",
+          "2、审核",
+          "各街道(乡镇)受理窗口通过综合管理平台接受申请，或现场确认申请材料后将信息归集至综合管理平台的北京市老年人养老服务补贴津贴管理系统；原则上于接收当日转街道(乡镇)负责民政业务的科室，由其进行初审后从系统转报区民政局。每月20日前，各街道(乡镇)将有异议的人员数据汇总报送区民政局。"
+        ]
+      }
+    ],
+    "answer": {
+      "responseType": "direct-answer",
+      "text": "页面写明：现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。网上申请：申请人可登录北京市政务服务网、北京市民政局官方网站或微信公众号，输入姓名和身份证号码后填报申请。",
+      "citations": [
+        {
+          "role": "title",
+          "text": "办理流程：",
+          "elementId": "ef-p-4"
+        },
+        {
+          "role": "body",
+          "text": "现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。",
+          "elementId": "ef-p-8"
+        },
+        {
+          "role": "body",
+          "text": "网上申请：申请人可登录北京市政务服务网、北京市民政局官方网站或微信公众号，输入姓名和身份证号码后填报申请。",
+          "elementId": "ef-p-7"
+        }
+      ],
+      "validation": {
+        "status": "passed"
+      }
+    }
+  },
+  "q3": {
+    "query": "那带 高龄津贴 材料 证件 证明 身份证 户口簿 原件",
+    "hits": [
+      {
+        "segmentId": "seg-4",
+        "titleText": "办理流程：",
+        "score": 2.16,
+        "matchedKeywords": [
+          "户口簿原",
+          "口簿原件",
+          "申请材料"
+        ],
+        "bodyTexts": [
+          "1、提出申请",
+          "由符合申请条件的老年人本人或其委托代理人，或监护人通过以下两种方式自愿申请：",
+          "网上申请：申请人可登录北京市政务服务网、北京市民政局官方网站或微信公众号，输入姓名和身份证号码后填报申请。",
+          "现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。或在社区(村)或街道(乡镇)领取并填写《北京市老年人养老服务补贴津贴申请表》后，到户籍所在地街道(乡镇)社会救助或“一门受理”窗口出示居民身份证或户口簿原件后提交。",
+          "注：在2019年10月25日前尚未提出申请的，由北京市社会福利综合管理平台通过老年人预留的手机号码推送养老服务津贴发放通知，确认回复后，综合管理平台直接生成并发放津贴至老年人持有的银行账户。",
+          "2、审核",
+          "各街道(乡镇)受理窗口通过综合管理平台接受申请，或现场确认申请材料后将信息归集至综合管理平台的北京市老年人养老服务补贴津贴管理系统；原则上于接收当日转街道(乡镇)负责民政业务的科室，由其进行初审后从系统转报区民政局。每月20日前，各街道(乡镇)将有异议的人员数据汇总报送区民政局。"
+        ]
+      }
+    ],
+    "answer": {
+      "responseType": "direct-answer",
+      "text": "页面写明：现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。或在社区(村)或街道(乡镇)领取并填写《北京市老年人养老服务补贴津贴申请表》后，到户籍所在地街道(乡镇)社会救助或“一门受理”窗口出示居民身份证或户口簿原件后提交。",
+      "citations": [
+        {
+          "role": "title",
+          "text": "办理流程：",
+          "elementId": "ef-p-4"
+        },
+        {
+          "role": "body",
+          "text": "现场申请：可以就近在本市任一街道(乡镇)办事窗口出示居民身份证或户口簿原件提出申请。",
+          "elementId": "ef-p-8"
+        },
+        {
+          "role": "body",
+          "text": "或在社区(村)或街道(乡镇)领取并填写《北京市老年人养老服务补贴津贴申请表》后，到户籍所在地街道(乡镇)社会救助或“一门受理”窗口出示居民身份证或户口簿原件后提交。",
+          "elementId": "ef-p-8"
+        }
+      ],
+      "validation": {
+        "status": "passed"
+      }
+    }
+  },
+  "unknown": {
+    "query": "体检条件是什么",
+    "answer": {
+      "responseType": "cannot-answer",
+      "text": "当前页面没有找到这项信息。",
+      "citations": [],
+      "validation": {
+        "status": "passed"
+      }
+    }
+  }
+}

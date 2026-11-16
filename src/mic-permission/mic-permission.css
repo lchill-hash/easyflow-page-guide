@@ -1,0 +1,61 @@
+.ef-mic-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f8fafc;
+  color: var(--ef-step-ink);
+}
+
+.ef-mic-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(560px, 100%);
+  padding: 24px;
+  border: 2px solid var(--ef-step-accent);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.ef-mic-card h1 {
+  margin: 0;
+  font-size: var(--ef-font-title);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ef-mic-card p {
+  margin: 0;
+  font-size: var(--ef-font-body);
+  line-height: var(--ef-line-body);
+  overflow-wrap: anywhere;
+}
+
+.ef-mic-action {
+  min-height: max(44px, var(--ef-tap-min));
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ef-step-accent);
+  color: #ffffff;
+  font-size: var(--ef-font-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ef-mic-action[disabled] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ef-mic-status {
+  color: var(--ef-muted);
+}
+
+.ef-mic-note {
+  color: var(--ef-muted);
+  font-size: var(--ef-font-small);
+}

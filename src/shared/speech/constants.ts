@@ -1,0 +1,19 @@
+export const SPEECH_LANG = "zh-CN" as const;
+export const SPEECH_RATE = 1.0;
+export const SPEECH_PITCH = 1.0;
+
+export const SPEECH_NO_RESULT_TIMEOUT_MS = 8000;
+export const SPEECH_REPEAT_WINDOW_MS = 1200;
+export const SPEECH_STOP_ACK_MS = 300;
+export const MIC_PERMISSION_PAGE_PATH = "mic-permission.html";
+export const MIC_PERMISSION_MESSAGE_VERSION = 1;
+export const MIC_PERMISSION_RECHECK_MIN_MS = 1000;
+export const MIC_PAGE_DEDUPE_GUARD_MS = 2000;
+export const MIC_REQUEST_VISIBLE_MS = 300;
+export const LOCAL_CAPABILITY_TIMEOUT_MS = 1500;
+export const LOCAL_CAPABILITY_CACHE_MS = 300000;
+export const LOCAL_AVAILABILITY_LANGS = ["zh-CN"] as const;
+export const LOCAL_INSTALL_LANGS = ["zh-CN"] as const;
+export const INSTALL_ERROR_BRIEF_MAX_CHARS = 40;
+export const INSTALL_ERROR_INPUT_MAX_CHARS = 2000;
+export const DIAGNOSTICS_SERIALIZED_MAX_CHARS = 480;

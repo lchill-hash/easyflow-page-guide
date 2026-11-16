@@ -1,0 +1,27 @@
+{
+  "name": "easyflow-page-guide",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "EasyFlow 页面指引扩展：在真实网页上读取可见内容并按本地关键词定位依据。",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && node scripts/build.mjs && node scripts/verify-manifest.mjs",
+    "verify": "node scripts/verify-manifest.mjs",
+    "selftest": "node scripts/selftest.mjs"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.0.287",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "esbuild": "0.24.2",
+    "typescript": "5.6.3"
+  }
+}

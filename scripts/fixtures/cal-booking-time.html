@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <!-- Calendar-semantics fixture, not a captured Cal.com DOM. -->
+    <div data-testid="booking-calendar" role="grid" aria-label="November 2026">
+      <button data-testid="day" aria-label="Monday, November 16, 2026" aria-selected="true">16</button>
+      <button data-testid="day" aria-label="Tuesday, November 17, 2026">17</button>
+      <button data-testid="day" aria-label="Wednesday, November 18, 2026" disabled>18</button>
+    </div>
+    <div data-testid="time-format" aria-label="Time format">
+      <button aria-label="12 hours">12h</button>
+      <button aria-label="24 hours">24h</button>
+    </div>
+    <div data-testid="time-slots" role="listbox" aria-label="Available times">
+      <div role="option" aria-label="02:00">02:00</div>
+      <div role="option" aria-label="02:15">02:15</div>
+      <div role="option" aria-label="02:30" aria-disabled="true">02:30</div>
+    </div>
+  </body>
+</html>

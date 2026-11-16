@@ -1,0 +1,166 @@
+{
+  "label": "before",
+  "capturedAt": "2026-11-13T10:16:02.894Z",
+  "url": "file:///C:/Users/%E5%B0%8F%E7%86%8A%E8%B7%BA~1/AppData/Local/Temp/easyflow-repro-XXXXXX0sp1Xs/harness.html",
+  "title": "unknown",
+  "itemCount": 4,
+  "segmentsFromSnapshot": 3,
+  "segmentsRebuilt": 3,
+  "diagnostics": {
+    "collectMs": 110,
+    "candidateCount": 7,
+    "visibleCount": 4,
+    "droppedHidden": 0,
+    "droppedByBudget": 0,
+    "contentVersion": "0.2.0",
+    "segmentsMs": 1,
+    "segmentCount": 3,
+    "controlCount": 0,
+    "iframeCount": 0
+  },
+  "relevantItems": [
+    {
+      "elementId": "ef-p-1",
+      "type": "paragraph",
+      "text": "日期:2026-01-26 09:16 来源:北京市民政局",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > p:nth-of-type(1)",
+      "titleCandidate": false,
+      "order": 2,
+      "region": "unknown"
+    },
+    {
+      "elementId": "ef-p-2",
+      "type": "paragraph",
+      "text": "办理条件：",
+      "domPath": "html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > p:nth-of-type(1)",
+      "titleCandidate": true,
+      "order": 3,
+      "region": "unknown"
+    }
+  ],
+  "relevantSegments": [
+    {
+      "segmentId": "seg-2",
+      "titleText": "高龄老年人津贴办理指南",
+      "hasBody": true,
+      "bodyTexts": [
+        "日期:2026-01-26 09:16 来源:北京市民政局"
+      ],
+      "textLength": 41,
+      "orderRange": [
+        1,
+        2
+      ]
+    },
+    {
+      "segmentId": "seg-3",
+      "titleText": "办理条件：",
+      "hasBody": false,
+      "bodyTexts": [],
+      "textLength": 5,
+      "orderRange": [
+        3,
+        3
+      ]
+    }
+  ],
+  "rebuiltRelevantSegments": [
+    {
+      "segmentId": "seg-2",
+      "titleText": "高龄老年人津贴办理指南",
+      "hasBody": true,
+      "bodyTexts": [
+        "日期:2026-01-26 09:16 来源:北京市民政局"
+      ],
+      "textLength": 41,
+      "orderRange": [
+        1,
+        2
+      ]
+    },
+    {
+      "segmentId": "seg-3",
+      "titleText": "办理条件：",
+      "hasBody": false,
+      "bodyTexts": [],
+      "textLength": 5,
+      "orderRange": [
+        3,
+        3
+      ]
+    }
+  ],
+  "q1": {
+    "query": "高龄津贴谁能申请",
+    "hits": [
+      {
+        "segmentId": "seg-2",
+        "titleText": "高龄老年人津贴办理指南",
+        "score": 2.25,
+        "matchedKeywords": [
+          "高龄",
+          "津贴"
+        ],
+        "bodyTexts": [
+          "日期:2026-01-26 09:16 来源:北京市民政局"
+        ]
+      }
+    ],
+    "answer": {
+      "responseType": "direct-answer",
+      "text": "页面写明：日期:2026-01-26 09:16 来源:北京市民政局",
+      "citations": [
+        {
+          "role": "title",
+          "text": "高龄老年人津贴办理指南",
+          "elementId": "ef-h-2"
+        },
+        {
+          "role": "body",
+          "text": "日期:2026-01-26 09:16 来源:北京市民政局",
+          "elementId": "ef-p-1"
+        }
+      ],
+      "validation": {
+        "status": "passed"
+      }
+    }
+  },
+  "q2": {
+    "query": "那办理 高龄津贴",
+    "hits": [
+      {
+        "segmentId": "seg-2",
+        "titleText": "高龄老年人津贴办理指南",
+        "score": 3.38,
+        "matchedKeywords": [
+          "办理",
+          "高龄",
+          "津贴"
+        ],
+        "bodyTexts": [
+          "日期:2026-01-26 09:16 来源:北京市民政局"
+        ]
+      }
+    ],
+    "answer": {
+      "responseType": "direct-answer",
+      "text": "页面写明：日期:2026-01-26 09:16 来源:北京市民政局",
+      "citations": [
+        {
+          "role": "title",
+          "text": "高龄老年人津贴办理指南",
+          "elementId": "ef-h-2"
+        },
+        {
+          "role": "body",
+          "text": "日期:2026-01-26 09:16 来源:北京市民政局",
+          "elementId": "ef-p-1"
+        }
+      ],
+      "validation": {
+        "status": "passed"
+      }
+    }
+  }
+}
