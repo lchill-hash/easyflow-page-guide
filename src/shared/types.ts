@@ -143,11 +143,50 @@ export interface ViewportRect {
 
 export type LocateStatus = "highlighted" | "folded" | "stale" | "partial";
 
+export type CleanupReason =
+  | "ttl"
+  | "replaced"
+  | "collect"
+  | "pagehide"
+  | "unroute"
+  | "noop";
+
+export interface HighlightStats {
+  refCalls: number;
+  roundStartCount: number;
+  pulseStartCount: number;
+  pulseCompletedCount: number;
+  overlayCreateCount: number;
+  overlayLiveCount: number;
+  overlayLiveMax: number;
+  legacyHostCount: number;
+  cleanupScheduledCount: number;
+  cleanupFiredCount: number;
+  cleanupReplacedCount: number;
+  cleanupNoopCount: number;
+  cleanupReason: CleanupReason | null;
+  positionUpdateCount: number;
+  domTickCount: number;
+  boxCreateCount: number;
+  boxRemoveCount: number;
+  boxCount: number;
+  uiModeAtRequest: "normal" | "care";
+  reducedMotionAtRequest: boolean;
+  lastRoundStartAt: number | null;
+  lastRoundEndAt: number | null;
+  lastCleanupAt: number | null;
+  highlightLifetimeMs: number | null;
+  contentVersionSeen: string;
+  expectedContentVersion: string;
+  pageInjectionCount: number;
+}
+
 export interface HighlightResult {
   status: LocateStatus;
   rect?: ViewportRect;
   locatedElementIds?: string[];
   missingElementIds?: string[];
+  stats?: HighlightStats;
 }
 
 export interface SemanticSegment {

@@ -7,6 +7,8 @@ import type { EfOk, PingData } from "../shared/messages";
 const injectedTabs = new Set<number>();
 const injectionLocks = new Map<number, Promise<EfResult<{ contentVersion: string }>>>();
 const lastInjectionErrors = new Map<number, EfError>();
+const injectionCounts = new Map<number, number>();
+const seenVersions = new Map<number, string>();
 
 function isPingResponse(value: unknown): value is EfOk<PingData> {
   if (typeof value !== "object" || value === null) {
@@ -20,10 +22,10 @@ function isPingResponse(value: unknown): value is EfOk<PingData> {
   return data.ready === true && typeof data.contentVersion === "string";
 }
 
-function ping(tabId: number): Promise<boolean> {
+function ping(tabId: number): Promise<string | null> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
-      resolve(false);
+      resolve(null);
     }, PING_TIMEOUT_MS);
     chrome.tabs.sendMessage(
       tabId,
@@ -31,14 +33,15 @@ function ping(tabId: number): Promise<boolean> {
       (response: unknown) => {
         clearTimeout(timer);
         if (chrome.runtime.lastError) {
-          resolve(false);
+          resolve(null);
           return;
         }
         if (!isPingResponse(response)) {
-          resolve(false);
+          resolve(null);
           return;
         }
-        resolve(response.data.contentVersion === CONTENT_VERSION);
+        seenVersions.set(tabId, response.data.contentVersion);
+        resolve(response.data.contentVersion);
       },
     );
   });
@@ -62,12 +65,14 @@ function recordInjectionError(tabId: number, error: EfError): EfResult<{ content
 }
 
 async function doEnsureInjected(tabId: number): Promise<EfResult<{ contentVersion: string }>> {
-  if (injectedTabs.has(tabId) && (await ping(tabId))) {
+  const existingVersion = await ping(tabId);
+  if (injectedTabs.has(tabId) && existingVersion === CONTENT_VERSION) {
     lastInjectionErrors.delete(tabId);
     return { ok: true, data: { contentVersion: CONTENT_VERSION } };
   }
   injectedTabs.delete(tabId);
 
+  injectionCounts.set(tabId, (injectionCounts.get(tabId) ?? 0) + 1);
   try {
     await chrome.scripting.executeScript({
       target: { tabId },
@@ -78,7 +83,7 @@ async function doEnsureInjected(tabId: number): Promise<EfResult<{ contentVersio
   }
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (await ping(tabId)) {
+    if ((await ping(tabId)) === CONTENT_VERSION) {
       injectedTabs.add(tabId);
       lastInjectionErrors.delete(tabId);
       return { ok: true, data: { contentVersion: CONTENT_VERSION } };
@@ -131,7 +136,21 @@ export function getLastInjectionError(tabId: number): EfError | undefined {
   return lastInjectionErrors.get(tabId);
 }
 
+export function getInjectionDiagnostics(tabId: number): {
+  pageInjectionCount: number;
+  contentVersionSeen: string;
+  expectedContentVersion: string;
+} {
+  return {
+    pageInjectionCount: injectionCounts.get(tabId) ?? 0,
+    contentVersionSeen: seenVersions.get(tabId) ?? "",
+    expectedContentVersion: CONTENT_VERSION,
+  };
+}
+
 export function resetInjected(tabId: number): void {
   injectedTabs.delete(tabId);
   lastInjectionErrors.delete(tabId);
+  injectionCounts.delete(tabId);
+  seenVersions.delete(tabId);
 }

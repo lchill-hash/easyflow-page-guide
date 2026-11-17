@@ -8,12 +8,14 @@ import { MessageList } from "./components/chat/MessageList";
 import { PageStatusLine } from "./components/chat/PageStatusLine";
 import { currentStep } from "./guide/stepPlanner";
 import { useConversation } from "./hooks/useConversation";
+import { useModelMode } from "./hooks/useModelMode";
 import { useSpeechSynthesis } from "./hooks/useSpeechSynthesis";
 import { useUiMode } from "./hooks/useUiMode";
 import { useVoiceInput } from "./hooks/useVoiceInput";
 
 export function App() {
   const { uiMode, modeReady, toggleMode } = useUiMode();
+  const modelMode = useModelMode();
   const {
     state,
     send,
@@ -24,7 +26,9 @@ export function App() {
     switchTask,
     locateCitation,
     locateControl,
-  } = useConversation(uiMode);
+    highlightStats,
+    highlightRequestCount,
+  } = useConversation(uiMode, modelMode.enabled, modelMode.ready);
   const voice = useVoiceInput();
   const speech = useSpeechSynthesis();
   const activeStep = currentStep(state.plan);
@@ -68,6 +72,9 @@ export function App() {
         uiMode={uiMode}
         modeReady={modeReady}
         onToggleMode={toggleMode}
+        modelEnabled={modelMode.enabled}
+        modelReady={modelMode.ready}
+        onToggleModel={modelMode.toggle}
       />
       <PageStatusLine state={state} />
       {state.slowHint ? <div className="ef-slow-hint">我正在看这个页面…</div> : null}
@@ -98,7 +105,7 @@ export function App() {
             switchTask();
           }}
         />
-        <AboutPanel />
+        <AboutPanel modelEnabled={modelMode.enabled} modelReady={modelMode.ready} />
       </main>
       <ChatComposer onSend={send} disabled={state.busy} voice={voice} uiMode={uiMode} />
       <DiagnosticsPanel
@@ -108,6 +115,8 @@ export function App() {
         bookingCompleted={state.pageSuccess === "confirmed"}
         speakUnavailableKind={speakUnavailableKind}
         speechDiagnostics={voice.view.diagnostics}
+        highlightStats={highlightStats}
+        highlightRequestCount={highlightRequestCount}
         onRecheckLocal={voice.recheckLocalCapability}
         onExpand={voice.ensureLocalCapability}
         onRefresh={() => {

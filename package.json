@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && node scripts/build.mjs && node scripts/verify-manifest.mjs",
     "verify": "node scripts/verify-manifest.mjs",
-    "selftest": "node scripts/selftest.mjs"
+    "selftest": "node scripts/selftest.mjs",
+    "model:proxy": "node --env-file=.env.local scripts/model-proxy.mjs"
   },
   "dependencies": {
     "react": "18.3.1",

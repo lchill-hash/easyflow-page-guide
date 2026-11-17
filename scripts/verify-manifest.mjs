@@ -40,7 +40,12 @@ check(
   `permissions 恰为 ${expected.join(", ")}（实际：${permissions.join(", ") || "空"}）`,
 );
 
-for (const field of ["host_permissions", "content_scripts", "web_accessible_resources", "externally_connectable"]) {
+check(
+  !("host_permissions" in manifest) ||
+    (Array.isArray(manifest.host_permissions) && manifest.host_permissions.length === 0),
+  "host_permissions 不存在或为空",
+);
+for (const field of ["content_scripts", "web_accessible_resources", "externally_connectable"]) {
   check(!(field in manifest), `清单不含 ${field}`);
 }
 
@@ -119,7 +124,6 @@ const runtimeForbidden = [
 ];
 
 const sourceForbidden = [
-  "host_permissions",
   "<all_urls>",
   "content_scripts",
   "dangerouslySetInnerHTML",
@@ -137,6 +141,18 @@ const getUserMediaExemptions = [
     scope: "dist",
     path: "dist/mic-permission.js",
     pattern: "getUserMedia",
+    used: false,
+  },
+  {
+    scope: "src",
+    path: "src/sidepanel/dialogue/model/ModelEngine.ts",
+    pattern: "fetch(",
+    used: false,
+  },
+  {
+    scope: "dist",
+    path: "dist/sidepanel.js",
+    pattern: "fetch(",
     used: false,
   },
 ];

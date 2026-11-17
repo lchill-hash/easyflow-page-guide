@@ -6,6 +6,7 @@ import type {
   BookingSuccessReason,
   CollectDiagnostics,
   ConversationDiagnostics,
+  HighlightStats,
 } from "../../../shared/types";
 
 interface DiagnosticsPanelProps {
@@ -15,6 +16,8 @@ interface DiagnosticsPanelProps {
   bookingCompleted: boolean;
   speakUnavailableKind: string | null;
   speechDiagnostics: SpeechDiagnosticsView;
+  highlightStats: HighlightStats | null;
+  highlightRequestCount: number;
   onRecheckLocal: () => void;
   onExpand: () => void;
   onRefresh: () => void;
@@ -57,6 +60,10 @@ function bookingCheckText(check: BookingCheck | null): string {
   return `成功判定 未通过（${reasonText(check.reason)}）`;
 }
 
+function msText(value: number | null): string {
+  return value === null ? "—" : `${Math.round(value)} ms`;
+}
+
 export function DiagnosticsPanel({
   entries,
   collectDiagnostics,
@@ -64,6 +71,8 @@ export function DiagnosticsPanel({
   bookingCompleted,
   speakUnavailableKind,
   speechDiagnostics,
+  highlightStats,
+  highlightRequestCount,
   onRecheckLocal,
   onExpand,
   onRefresh,
@@ -141,6 +150,49 @@ export function DiagnosticsPanel({
               {SPEECH_DIAGNOSTICS_TEXTS.recheck}
             </button>
           </section>
+
+          <details className="ef-highlight-diag">
+            <summary>高亮</summary>
+            {highlightStats === null ? (
+              <p className="ef-muted">暂无高亮记录</p>
+            ) : (
+              <div className="ef-speech-diag-grid">
+                <span>请求次数：{highlightRequestCount}</span>
+                <span>轮次：{highlightStats.roundStartCount}</span>
+                <span>
+                  脉冲启动/完成：{highlightStats.pulseStartCount}/{highlightStats.pulseCompletedCount}
+                </span>
+                <span>
+                  宿主创建/当前/峰值/未标识：{highlightStats.overlayCreateCount}/
+                  {highlightStats.overlayLiveCount}/{highlightStats.overlayLiveMax}/
+                  {highlightStats.legacyHostCount}
+                </span>
+                <span>
+                  清理计划/执行/替换/空操作：{highlightStats.cleanupScheduledCount}/
+                  {highlightStats.cleanupFiredCount}/{highlightStats.cleanupReplacedCount}/
+                  {highlightStats.cleanupNoopCount}
+                </span>
+                <span>
+                  最近清理：{highlightStats.cleanupReason ?? "无"}（
+                  {msText(highlightStats.lastCleanupAt)}，存活{" "}
+                  {msText(highlightStats.highlightLifetimeMs)}）
+                </span>
+                <span>
+                  位置更新/DOM tick：{highlightStats.positionUpdateCount}/
+                  {highlightStats.domTickCount}
+                </span>
+                <span>
+                  框创建/移除/当前：{highlightStats.boxCreateCount}/
+                  {highlightStats.boxRemoveCount}/{highlightStats.boxCount}
+                </span>
+                <span>
+                  页面/期望版本：{highlightStats.contentVersionSeen || "未知"} /{" "}
+                  {highlightStats.expectedContentVersion || "未知"}
+                </span>
+                <span>页面注入次数：{highlightStats.pageInjectionCount}</span>
+              </div>
+            )}
+          </details>
 
           {collectDiagnostics !== null ? (
             <section aria-labelledby="ef-page-diag-title">

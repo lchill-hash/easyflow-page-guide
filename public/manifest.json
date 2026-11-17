@@ -5,6 +5,7 @@
   "description": "在用户主动打开的真实网页上读取可见内容，并按本地关键词定位原文依据的浏览器指引层。",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "scripting", "sidePanel", "storage"],
+
   "background": {
     "service_worker": "background.js",
     "type": "module"

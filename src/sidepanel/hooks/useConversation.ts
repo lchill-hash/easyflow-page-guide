@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   ENGINE_SLOW_HINT_MS,
   MAX_AUTO_RECHECK_PER_STEP,
@@ -34,12 +34,15 @@ import type {
   DialogueResponse,
   ElementRef,
   GuidePlan,
+  HighlightStats,
   PageSnapshot,
   ResponseType,
   SystemNotice,
   UserMessage,
 } from "../../shared/types";
 import { ruleEngine } from "../dialogue/rule/RuleEngine";
+import { modelEngine } from "../dialogue/model/ModelEngine";
+import { fallbackNotice, fallbackReasonOf, shouldUseOnlineModel } from "../../shared/model/fallback";
 import { isCompletionUtterance } from "../dialogue/intent/classifier";
 import { validateResponse } from "../dialogue/validate/validator";
 import {
@@ -288,10 +291,17 @@ function buildContext(state: {
   return context;
 }
 
-export function useConversation(uiMode: UiMode) {
+export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady = false) {
   const [state, dispatch] = useReducer(conversationReducer, undefined, createConversationState);
   const stateRef = useRef(state);
+  const highlightRequestCount = useRef(0);
+  const [highlightStats, setHighlightStats] = useState<HighlightStats | null>(null);
   const uiModeRef = useRef<UiMode>("normal");
+  const modelEnabledRef = useRef(modelEnabled);
+  const modelReadyRef = useRef(modelReady);
+  const modelFallbackNotified = useRef(false);
+  modelEnabledRef.current = modelEnabled;
+  modelReadyRef.current = modelReady;
   const slowTimer = useRef<number | null>(null);
   const lastRecheckAt = useRef(0);
   const autoRechecks = useRef(0);
@@ -839,19 +849,24 @@ export function useConversation(uiMode: UiMode) {
         segments: activeSnapshot.segments ?? [],
         controls: activeSnapshot.controls ?? [],
         plan: activePlan,
-        capabilities: { modelConfigured: false, voiceEnabled: false },
+        capabilities: { modelConfigured: modelEnabledRef.current, voiceEnabled: false },
       };
 
       let response: DialogueResponse;
+      const useOnline = shouldUseOnlineModel(modelEnabledRef.current, modelReadyRef.current);
       try {
-        response = await ruleEngine.respond(request);
+        response = await (useOnline ? modelEngine : ruleEngine).respond(request);
       } catch (error) {
-        response = makeCannotResponse(
-          "我暂时不能可靠回答，页面内容可能刚变过。",
-          "low-confidence",
-          "换一种问法，或重新读取页面。",
-        );
         console.warn("[EF]", { phase: "dialogue-engine-failed", detail: String(error) });
+        response = await ruleEngine.respond(request);
+        if (useOnline) {
+          const reason = fallbackReasonOf(error);
+          response.diagnostics.priorityHit = `model-fallback:${reason}`;
+          if (!modelFallbackNotified.current) {
+            modelFallbackNotified.current = true;
+            appendSystemOnce(fallbackNotice(reason), "rechecking");
+          }
+        }
       }
 
       if (
@@ -865,7 +880,16 @@ export function useConversation(uiMode: UiMode) {
           : buildBookingUnconfirmedResponse(bookingEvidence.reason);
       }
 
-      const validation = validateResponse(response, activeSnapshot, activePlan);
+      let validation = validateResponse(response, activeSnapshot, activePlan);
+      if (validation.status === "rejected" && response.diagnostics.mode === "online-model") {
+        response = await ruleEngine.respond(request);
+        response.diagnostics.priorityHit = `model-validation-fallback:${validation.reason ?? "unknown"}`;
+        if (!modelFallbackNotified.current) {
+          modelFallbackNotified.current = true;
+          appendSystemOnce(fallbackNotice("validation"), "rechecking");
+        }
+        validation = validateResponse(response, activeSnapshot, activePlan);
+      }
       let validationStatus: "passed" | "rejected" = validation.status;
       if (validation.status === "rejected") {
         response = makeCannotResponse(
@@ -918,7 +942,7 @@ export function useConversation(uiMode: UiMode) {
 
       const diagnostics: ConversationDiagnostics = {
         turnId,
-        mode: "rule-demo",
+        mode: response.diagnostics.mode,
         readMs: current.readMs,
         engineMs: response.diagnostics.engineMs,
         itemCount: activeSnapshot.itemCount,
@@ -926,8 +950,8 @@ export function useConversation(uiMode: UiMode) {
         controlCount: activeSnapshot.controls?.length ?? 0,
         citationCount: response.citations.length,
         validation: validationStatus,
-        outboundBytes: 0,
-        sensitiveDetected: false,
+        outboundBytes: response.diagnostics.outboundBytes,
+        sensitiveDetected: response.diagnostics.sensitiveDetected,
       };
       if (validation.reason !== undefined) {
         diagnostics.rejectReason = validation.reason;
@@ -1058,6 +1082,7 @@ export function useConversation(uiMode: UiMode) {
   }, [runTurn]);
 
   const highlight = useCallback(async (ref: ElementRef): Promise<void> => {
+    highlightRequestCount.current += 1;
     const current = stateRef.current;
     if (current.tabId === null) {
       appendSystemOnce("我还没读到当前页面。点重试后再试。", "citation-stale");
@@ -1074,6 +1099,9 @@ export function useConversation(uiMode: UiMode) {
     if (!response.ok) {
       appendSystemOnce(response.error.message, "citation-stale");
       return;
+    }
+    if (response.data.stats !== undefined) {
+      setHighlightStats(response.data.stats);
     }
     const status = response.data.status;
     if (status === "folded") {
@@ -1171,5 +1199,7 @@ export function useConversation(uiMode: UiMode) {
     switchTask,
     locateCitation,
     locateControl,
+    highlightStats,
+    highlightRequestCount: highlightRequestCount.current,
   };
 }

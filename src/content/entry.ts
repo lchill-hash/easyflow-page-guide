@@ -67,7 +67,7 @@ function handle(request: ContentRequest): EfResponse<unknown> {
     case MSG.CONTENT_UNWATCH:
       return ok(request.requestId, stopWatching());
     case MSG.CONTENT_COLLECT: {
-      cleanupHighlight();
+      cleanupHighlight("collect");
       const result = collectPage(
         request.snapshotId,
         request.runId,

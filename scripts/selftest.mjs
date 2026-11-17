@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { fileURLToPath } from "node:url";
+import * as proxyLib from "./model-proxy-lib.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const tempDir = await mkdtemp(join(tmpdir(), "easyflow-selftest-"));
@@ -51,6 +52,8 @@ await build({
       'export { describeSpeechDiagnostics, formatRelativeTime, PERMISSION_DIAG_LABEL, RAW_ERROR_LABEL, RAW_ERROR_CODE_LABEL, LOCAL_AVAILABILITY_LABEL, INSTALL_STATE_LABEL, ONSTART_LABEL } from "./src/shared/speech/diagnostics.ts";',
       'export { speechIssueText, SPEECH_NO_SPEECH_TEXT, SPEECH_GENERIC_FAILED_TEXT, SPEECH_NETWORK_GRANTED_TEXT, SPEECH_NETWORK_UNKNOWN_TEXT, SPEECH_NOT_ALLOWED_GRANTED_TEXT, SPEECH_MODE_TEXTS, SPEECH_LOCAL_TEXTS, SPEECH_DIAGNOSTICS_TEXTS, SPEAK_UNAVAILABLE_KIND_TEXT, INSTALL_OUTCOME_TEXTS, INSTALL_ERROR_TEXTS } from "./src/shared/speech/copy.ts";',
       'export { LOCAL_CAPABILITY_TIMEOUT_MS, LOCAL_CAPABILITY_CACHE_MS, LOCAL_AVAILABILITY_LANGS, LOCAL_INSTALL_LANGS, INSTALL_ERROR_BRIEF_MAX_CHARS, INSTALL_ERROR_INPUT_MAX_CHARS, DIAGNOSTICS_SERIALIZED_MAX_CHARS } from "./src/shared/speech/constants.ts";',
+      'export { CONTENT_VERSION, HIGHLIGHT_TTL_MS, HIGHLIGHT_PULSE_DURATION_MS, HIGHLIGHT_PULSE_COUNT, HIGHLIGHT_STATIC_MIN_MS, HIGHLIGHT_BOX_POOL_MAX, HIGHLIGHT_HOST_ATTR, HIGHLIGHT_ROUND_ATTR, HIGHLIGHT_STATS_SERIALIZED_MAX_CHARS } from "./src/shared/constants.ts";',
+      'export { createRoundState, reduceRound, isPulsing, pulseTotalMs } from "./src/content/highlightRound.ts";',
       'export { mapRawErrorCode } from "./src/shared/speech/policy.ts";',
       'export { INSTALL_ERROR_NAMES, normalizeInstallErrorName, sanitizeInstallErrorBrief, readInstallErrorDetail, describeInstallOutcomeText } from "./src/shared/speech/installReport.ts";',
       'export { DIAGNOSTIC_FORBIDDEN_WORDS, AUDIO_DATA_FORBIDDEN_WORDS, INSTALL_BRIEF_FORBIDDEN_WORDS, ALLOWED_DIAGNOSTIC_AUDIO_VALUE } from "./src/shared/speech/forbidden.ts";',
@@ -58,9 +61,12 @@ await build({
       'export { annotateControls } from "./src/content/controls.ts";',
       'export { detectSensitive } from "./src/shared/privacy/detect.ts";',
       'export { redactText, sanitizeOutbound, redactUrl } from "./src/shared/privacy/redact.ts";',
-      'export { ModelDialogueEngine, modelProxyStatus } from "./src/sidepanel/dialogue/model/ModelEngine.ts";',
+      'export { ModelDialogueEngine } from "./src/sidepanel/dialogue/model/ModelEngine.ts";',
       'export { conversationReducer, createConversationState } from "./src/sidepanel/state/conversationReducer.ts";',
       'export { extractReusableObject, sanitizeReusableObject } from "./src/sidepanel/dialogue/context/topic.ts";',
+      'export { detectNameRisk, redactLabeledNames, sanitizeNameText } from "./src/shared/privacy/name.ts";',
+      'export { ModelFallbackError, shouldUseOnlineModel, fallbackNotice, fallbackReasonOf } from "./src/shared/model/fallback.ts";',
+      'export { PROXY_CONTRACT } from "./src/shared/privacy/redact.ts";',
     ].join("\n"),
     resolveDir: root,
     sourcefile: "selftest-entry.ts",
@@ -532,13 +538,27 @@ test("AT-17/19 敏感值不进入脱敏出站，地址去掉查询串", () => {
   assert.equal(blocked.status, "blocked");
 });
 
-test("AT-21/22 模型未配置且非法引用被拒绝", async () => {
+test("AT-21/22 在线模型代理响应与非法引用被拒绝", async () => {
   const snapshot = makePageSnapshot([makeItem(1, "示例正文。")]);
   const model = new ef.ModelDialogueEngine();
-  const response = await model.respond(makeRequest("示例问题", snapshot));
-  assert.equal(response.responseType, "cannot-answer");
-  assert.equal(response.diagnostics.outboundBytes, 0);
-  assert.equal(ef.modelProxyStatus, "not-configured");
+  const originalFetch = globalThis.fetch;
+  let outboundBody = "";
+  globalThis.fetch = async (_url, options) => {
+    outboundBody = String(options.body);
+    return { ok: true, json: async () => ({ result: {
+      kind: "clarify", text: "请告诉我想了解什么。", question: "你想了解哪一项？",
+    } }) };
+  };
+  let response;
+  try {
+    response = await model.respond(makeRequest("示例问题", snapshot));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(response.responseType, "clarify");
+  assert.equal(response.diagnostics.mode, "online-model");
+  assert.ok(response.diagnostics.outboundBytes > 0);
+  assert.ok(!outboundBody.includes("<html"));
 
   const invalid = {
     responseType: "direct-answer",
@@ -560,6 +580,35 @@ test("AT-21/22 模型未配置且非法引用被拒绝", async () => {
   const validation = ef.validateResponse(invalid, snapshot, null);
   assert.equal(validation.status, "rejected");
   assert.equal(validation.reason, "citation-missing");
+});
+
+test("AT-115 在线模型只接受当前页引用与安全控件", async () => {
+  const title = makeItem(1, "办理条件", { type: "heading", elementId: "ef-h-1" });
+  const body = makeItem(2, "年满80周岁可以申请。", { elementId: "ef-p-2" });
+  const safe = makeControl(1, "选择日期", "button", { kind: "date" });
+  const disabled = makeControl(2, "已约满", "button", { kind: "time", disabled: true });
+  const snapshot = makePageSnapshot([title, body], {
+    segments: [makeSegment(1, title, [body])], controls: [safe, disabled],
+  });
+  const originalFetch = globalThis.fetch;
+  let reply = { kind: "answer", text: "年满80周岁可以申请。", segmentIds: ["seg-1"] };
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ result: reply }) });
+  try {
+    const model = new ef.ModelDialogueEngine();
+    const request = makeRequest("申请条件是什么", snapshot);
+    const answer = await model.respond(request);
+    assert.equal(answer.responseType, "direct-answer");
+    assert.equal(ef.validateResponse(answer, snapshot, null).status, "passed");
+    reply = { kind: "step", text: "请先选择日期。", controlId: safe.controlId };
+    const step = await model.respond(request);
+    assert.equal(step.responseType, "next-step");
+    assert.equal(step.targetControl.controlId, safe.controlId);
+    assert.equal(ef.validateResponse(step, snapshot, null).status, "passed");
+    reply = { kind: "step", text: "请选择已约满时段。", controlId: disabled.controlId };
+    await assert.rejects(() => model.respond(request), /model-fallback:unsafe-control/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 test("AT-13/14 陪办计划生成与重规划", () => {
   const controls = [
@@ -3120,7 +3169,7 @@ test("AT-50 样式 token、偏好契约与源码清洁", async () => {
     join(root, "src", "sidepanel", "components", "chat", "AboutPanel.tsx"),
     "utf8",
   );
-  assert.ok(about.includes("本地规则演示，未接入在线模型"));
+  assert.ok(about.includes("在线智能已连接"));
   assert.ok(about.includes("SPEECH_DISCLOSURE_TEXT"));
   assert.ok(!about.includes("语音暂未开放"));
   const speechCopy = await readFile(
@@ -3651,4 +3700,481 @@ test("AT-63 关怀尺寸、告知与回归红线", async () => {
 
   const manifest = JSON.parse(await readFile(join(root, "public", "manifest.json"), "utf8"));
   assert.deepEqual(manifest.permissions, ["activeTab", "scripting", "sidePanel", "storage"]);
+});
+const normalRoundConfig = {
+  pulseDurationMs: 600,
+  pulseCount: 3,
+  ttlMs: 4000,
+  care: false,
+  reducedMotion: false,
+  supportsAnimate: true,
+};
+
+test("AT-106 高亮单轮状态机与计数不变式", () => {
+  let state = ef.createRoundState();
+  assert.equal(state.phase, "idle");
+  assert.equal(state.roundId, 0);
+  assert.equal(state.timing.ttlAt, null);
+
+  state = ef.reduceRound(state, { type: "round-start", now: 1000, config: normalRoundConfig });
+  assert.equal(state.phase, "pulsing");
+  assert.equal(state.counters.roundStartCount, 1);
+  assert.equal(state.counters.pulseStartCount, 1);
+  assert.equal(state.counters.cleanupScheduledCount, 1);
+  assert.equal(state.counters.overlayCreateCount, 1);
+  assert.equal(state.counters.overlayLiveCount, 1);
+  assert.equal(state.timing.ttlAt, 5000);
+  assert.equal(state.timing.pulseEndsAt, 2800);
+
+  for (let index = 0; index < 3; index += 1) {
+    state = ef.reduceRound(state, { type: "position-updated", now: 1100 + index });
+    state = ef.reduceRound(state, { type: "dom-tick", now: 1100 + index });
+  }
+  assert.equal(state.counters.positionUpdateCount, 3);
+  assert.equal(state.counters.domTickCount, 3);
+  assert.equal(state.timing.ttlAt, 5000);
+
+  const early = ef.reduceRound(state, { type: "pulse-complete", now: 2000 });
+  assert.equal(early, state);
+  state = ef.reduceRound(state, { type: "pulse-complete", now: 2800 });
+  assert.equal(state.phase, "static");
+  assert.equal(state.counters.pulseCompletedCount, 1);
+
+  state = ef.reduceRound(state, { type: "cleanup", now: 5000, reason: "ttl" });
+  assert.equal(state.phase, "cleared");
+  assert.equal(state.counters.cleanupFiredCount, 1);
+  assert.equal(state.counters.overlayLiveCount, 0);
+  assert.equal(state.timing.ttlAt, null);
+  assert.equal(state.timing.highlightLifetimeMs, 4000);
+
+  const noop = ef.reduceRound(state, { type: "cleanup", now: 6000, reason: "noop" });
+  assert.equal(noop.counters.cleanupNoopCount, 1);
+  assert.equal(noop.timing.lastCleanupAt, 5000);
+
+  let rounds = ef.createRoundState();
+  rounds = ef.reduceRound(rounds, { type: "round-start", now: 0, config: normalRoundConfig });
+  rounds = ef.reduceRound(rounds, { type: "cleanup", now: 100, reason: "replaced" });
+  rounds = ef.reduceRound(rounds, { type: "round-start", now: 200, config: normalRoundConfig });
+  rounds = ef.reduceRound(rounds, { type: "cleanup", now: 300, reason: "replaced" });
+  rounds = ef.reduceRound(rounds, { type: "round-start", now: 400, config: normalRoundConfig });
+  assert.equal(rounds.counters.roundStartCount, 3);
+  assert.equal(rounds.counters.cleanupReplacedCount, 2);
+  assert.equal(rounds.counters.overlayLiveMax, 1);
+});
+
+test("AT-107 高亮常量关系与静态实现约束", async () => {
+  assert.equal(ef.CONTENT_VERSION, "0.4.0");
+  assert.equal(ef.HIGHLIGHT_PULSE_DURATION_MS, 600);
+  assert.equal(ef.HIGHLIGHT_PULSE_COUNT, 3);
+  assert.equal(ef.HIGHLIGHT_PULSE_DURATION_MS * ef.HIGHLIGHT_PULSE_COUNT, 1800);
+  assert.ok(ef.HIGHLIGHT_PULSE_DURATION_MS * ef.HIGHLIGHT_PULSE_COUNT <= 2000);
+  assert.ok(ef.HIGHLIGHT_TTL_MS >= 1800 + ef.HIGHLIGHT_STATIC_MIN_MS);
+  assert.equal(ef.HIGHLIGHT_HOST_ATTR, "data-ef-highlight");
+  assert.equal(ef.HIGHLIGHT_ROUND_ATTR, "data-ef-round");
+  assert.equal(ef.HIGHLIGHT_BOX_POOL_MAX, 60);
+  assert.equal(ef.HIGHLIGHT_STATS_SERIALIZED_MAX_CHARS, 1024);
+
+  const source = await readFile(join(root, "src", "content", "highlight.ts"), "utf8");
+  assert.ok(!source.includes("750"));
+  assert.ok(!source.includes("4000"));
+  assert.ok(!source.includes("iterations: 3"));
+  assert.ok(!source.includes("setInterval"));
+  assert.ok(!source.includes("querySelectorAll"));
+  const measureStart = source.indexOf("function measure(");
+  const measureEnd = source.indexOf("export function highlightRef");
+  const measureBody = source.slice(measureStart, measureEnd);
+  assert.ok(measureBody.indexOf("scrollIntoView") < measureBody.indexOf("buildTextHighlight"));
+  const updateStart = source.indexOf("function updateOverlayPositions");
+  const updateEnd = source.indexOf("function scheduleOverlayUpdate");
+  const updateBody = source.slice(updateStart, updateEnd);
+  assert.ok(updateBody.includes("positionBoxes(boxes)"));
+  assert.ok(!updateBody.includes("startPulse"));
+  const finishStart = source.indexOf("function finish(");
+  const finishEnd = source.indexOf("export function cleanupHighlight");
+  const finishBody = source.slice(finishStart, finishEnd);
+  assert.ok(finishBody.indexOf("clearSessionResources") < finishBody.indexOf("target.host.remove"));
+  assert.ok(
+    finishBody.indexOf("target.host.remove") <
+      finishBody.lastIndexOf('type: "cleanup"'),
+  );
+  assert.ok(finishBody.includes("syncHosts"));
+});
+
+test("AT-108 关怀与减少动态始终静态", () => {
+  for (const config of [
+    { ...normalRoundConfig, care: true },
+    { ...normalRoundConfig, reducedMotion: true },
+    { ...normalRoundConfig, supportsAnimate: false },
+  ]) {
+    assert.equal(ef.isPulsing(config), false);
+    const state = ef.reduceRound(ef.createRoundState(), {
+      type: "round-start",
+      now: 10,
+      config,
+    });
+    assert.equal(state.phase, "static");
+    assert.equal(state.counters.pulseStartCount, 0);
+    assert.equal(state.counters.roundStartCount, 1);
+    assert.equal(state.timing.pulseEndsAt, null);
+  }
+});
+
+test("AT-109 清理原因可辨且替换不叠加", () => {
+  let state = ef.reduceRound(ef.createRoundState(), {
+    type: "round-start",
+    now: 0,
+    config: normalRoundConfig,
+  });
+  state = ef.reduceRound(state, { type: "cleanup", now: 500, reason: "replaced" });
+  assert.equal(state.counters.cleanupReplacedCount, 1);
+  assert.equal(state.counters.cleanupFiredCount, 0);
+  assert.equal(state.timing.lastCleanupReason, "replaced");
+
+  for (const reason of ["ttl", "collect", "pagehide", "unroute"]) {
+    let next = ef.reduceRound(ef.createRoundState(), {
+      type: "round-start",
+      now: 0,
+      config: normalRoundConfig,
+    });
+    next = ef.reduceRound(next, { type: "cleanup", now: 100, reason });
+    assert.equal(next.counters.cleanupFiredCount, 1, reason);
+    assert.equal(next.timing.lastCleanupReason, reason);
+    assert.equal(next.counters.overlayLiveCount, 0);
+  }
+
+  const idleNoop = ef.reduceRound(ef.createRoundState(), {
+    type: "cleanup",
+    now: 100,
+    reason: "noop",
+  });
+  assert.equal(idleNoop.counters.cleanupNoopCount, 1);
+  assert.equal(idleNoop.timing.lastCleanupAt, null);
+});
+
+test("AT-110 宿主复核与框池计数", () => {
+  let state = ef.reduceRound(ef.createRoundState(), {
+    type: "round-start",
+    now: 0,
+    config: normalRoundConfig,
+  });
+  state = ef.reduceRound(state, { type: "hosts-measured", now: 1, live: 0, legacy: 1 });
+  assert.equal(state.counters.overlayLiveCount, 0);
+  assert.equal(state.counters.overlayLiveMax, 1);
+  assert.equal(state.counters.legacyHostCount, 1);
+
+  state = ef.reduceRound(state, {
+    type: "boxes-synced",
+    now: 2,
+    created: 3,
+    removed: 0,
+    visible: 3,
+  });
+  state = ef.reduceRound(state, {
+    type: "boxes-synced",
+    now: 3,
+    created: 0,
+    removed: 0,
+    visible: 2,
+  });
+  assert.equal(state.counters.boxCreateCount, 3);
+  assert.equal(state.counters.boxRemoveCount, 0);
+  assert.equal(state.counters.boxCount, 2);
+});
+
+test("AT-111 高亮统计只含计数与时间", async () => {
+  const stats = {
+    refCalls: 1,
+    roundStartCount: 1,
+    pulseStartCount: 1,
+    pulseCompletedCount: 1,
+    overlayCreateCount: 1,
+    overlayLiveCount: 0,
+    overlayLiveMax: 1,
+    legacyHostCount: 0,
+    cleanupScheduledCount: 1,
+    cleanupFiredCount: 1,
+    cleanupReplacedCount: 0,
+    cleanupNoopCount: 0,
+    cleanupReason: "ttl",
+    positionUpdateCount: 2,
+    domTickCount: 1,
+    boxCreateCount: 1,
+    boxRemoveCount: 0,
+    boxCount: 0,
+    uiModeAtRequest: "normal",
+    reducedMotionAtRequest: false,
+    lastRoundStartAt: 100,
+    lastRoundEndAt: 1900,
+    lastCleanupAt: 4100,
+    highlightLifetimeMs: 4000,
+    contentVersionSeen: "0.4.0",
+    expectedContentVersion: "0.4.0",
+    pageInjectionCount: 1,
+  };
+  assert.equal(Object.keys(stats).length, 27);
+  const serialized = JSON.stringify(stats);
+  assert.ok(serialized.length <= ef.HIGHLIGHT_STATS_SERIALIZED_MAX_CHARS);
+  assert.ok(!/https?:|用户输入|网页标题|查询串/.test(serialized));
+
+  const source = await readFile(join(root, "src", "content", "highlight.ts"), "utf8");
+  assert.ok(source.includes("contentVersionSeen: \"\""));
+  assert.ok(!source.includes("document.title"));
+  assert.ok(!source.includes("location.href"));
+  assert.ok(!source.includes("querySelectorAll"));
+  assert.ok(source.includes("legacyHostCount"));
+  assert.ok(source.includes("cleanupReplacedCount"));
+  assert.ok(source.includes("cleanupNoopCount"));
+});
+
+test("AT-112 侧栏 CSS 单 token 源与视觉约束", async () => {
+  const css = await readFile(
+    join(root, "src", "sidepanel", "styles", "sidepanel.css"),
+    "utf8",
+  );
+  assert.equal((css.match(/:root\s*\{/g) ?? []).length, 1);
+  assert.ok(css.includes('html[data-ui-mode="care"]'));
+  assert.ok(css.includes("--ef-font-body: 18px"));
+  assert.ok(css.includes("--ef-font-current: 22px"));
+  assert.ok(css.includes("--ef-primary-min-h: 48px"));
+  assert.ok(css.includes("--ef-tap-min: 44px"));
+  assert.ok(css.includes("linear-gradient(135deg, #4f46e5"));
+  assert.ok(css.includes("--ef-primary: #5b42ed"));
+  assert.ok(css.includes("@media (max-width: 420px)"));
+  assert.ok(css.includes("@media (max-width: 320px)"));
+  assert.ok(css.includes("prefers-reduced-motion: reduce"));
+  assert.ok(css.includes(":focus-visible"));
+  assert.ok(/\.ef-step-actions-line\s*>\s*\.ef-step-primary\s*\{[^}]*min-height:\s*var\(--ef-primary-min-h\)/s.test(css));
+  assert.ok(/\.ef-speech-open-btn\s*\{[^}]*min-height:\s*var\(--ef-tap-min\)/s.test(css));
+  assert.ok(/\.ef-speak-btn\s*\{[^}]*min-height:\s*var\(--ef-tap-min\)/s.test(css));
+});
+
+test("AT-113 高亮诊断接线且不记录网页文本", async () => {
+  const hook = await readFile(
+    join(root, "src", "sidepanel", "hooks", "useConversation.ts"),
+    "utf8",
+  );
+  assert.ok(hook.includes("highlightRequestCount"));
+  assert.ok(hook.includes("setHighlightStats"));
+  const app = await readFile(join(root, "src", "sidepanel", "App.tsx"), "utf8");
+  assert.ok(app.includes("highlightStats"));
+  assert.ok(app.includes("highlightRequestCount"));
+  const panel = await readFile(
+    join(root, "src", "sidepanel", "components", "chat", "DiagnosticsPanel.tsx"),
+    "utf8",
+  );
+  assert.ok(panel.includes("高亮"));
+  assert.ok(panel.includes("pageInjectionCount"));
+  assert.ok(!panel.includes("document.title"));
+  assert.ok(!panel.includes("location.href"));
+  assert.ok(!panel.includes("innerText"));
+});
+
+test("AT-114 高亮改动回归与边界", async () => {
+  const manifest = JSON.parse(await readFile(join(root, "public", "manifest.json"), "utf8"));
+  assert.deepEqual(manifest.permissions, ["activeTab", "scripting", "sidePanel", "storage"]);
+  assert.equal(ef.stepCardActions("current").length, 5);
+  assert.equal(Object.keys(ef.RAW_ERROR_CODE_LABEL).length, 8);
+  assert.equal(ef.SPEAK_LABELS.step, "朗读这一步");
+
+  const verifySource = await readFile(
+    join(root, "scripts", "verify-manifest.mjs"),
+    "utf8",
+  );
+  const exceptions = [
+    ...verifySource.matchAll(
+      /scope: "(src|dist)",\s*path: "([^"]+)",\s*pattern: "getUserMedia"/g,
+    ),
+  ];
+  assert.equal(exceptions.length, 2);
+
+  for (const dir of [
+    join(root, "src", "shared", "speech"),
+    join(root, "src", "sidepanel", "speech"),
+    join(root, "src", "mic-permission"),
+  ]) {
+    for (const path of await collectSourceFiles(dir)) {
+      const source = await readFile(path, "utf8");
+      assert.ok(!source.includes("chrome.storage"), path);
+      assert.ok(!source.includes("MediaRecorder"), path);
+    }
+  }
+});
+test("AT-116 在线模式未就绪不启用且回退提示可区分", () => {
+  assert.equal(ef.shouldUseOnlineModel(false, true), false);
+  assert.equal(ef.shouldUseOnlineModel(true, false), false);
+  assert.equal(ef.shouldUseOnlineModel(false, false), false);
+  assert.equal(ef.shouldUseOnlineModel(true, true), true);
+  for (const reason of [
+    "timeout",
+    "network",
+    "outbound-blocked",
+    "ungrounded",
+    "unsafe-control",
+    "unsafe-instruction",
+    "validation",
+  ]) {
+    assert.ok(ef.fallbackNotice(reason).length > 0, reason);
+  }
+  assert.notEqual(ef.fallbackNotice("timeout"), ef.fallbackNotice("unsafe-control"));
+  assert.equal(ef.shouldUseOnlineModel(true, true), true);
+});
+
+test("AT-117 Key 不进入源码产物与示例文件", async () => {
+  const keyPattern = /sk-[A-Za-z0-9]{20,}/;
+  for (const file of [
+    "src/sidepanel/dialogue/model/ModelEngine.ts",
+    "scripts/model-proxy.mjs",
+    "scripts/model-proxy-lib.mjs",
+    ".env.example",
+    "package.json",
+    "public/manifest.json",
+  ]) {
+    const source = await readFile(join(root, file), "utf8");
+    assert.ok(!keyPattern.test(source), file);
+  }
+  const example = await readFile(join(root, ".env.example"), "utf8");
+  assert.ok(example.includes("your_deepseek_api_key_here"));
+  assert.ok(!example.includes("sk-"));
+  const gitignore = await readFile(join(root, ".gitignore"), "utf8");
+  assert.ok(/^\.env\.\*/m.test(gitignore) || gitignore.includes(".env.local"));
+  let envLocalExists = true;
+  try {
+    await readFile(join(root, ".env.local"), "utf8");
+  } catch {
+    envLocalExists = false;
+  }
+  assert.equal(envLocalExists, false);
+});
+
+test("AT-118 姓名标签替换与无标签严格阻断", () => {
+  const labeled = ef.sanitizeNameText("申请人：张三，请办理");
+  assert.equal(labeled.blocked, false);
+  assert.ok(!labeled.text.includes("张三"));
+  assert.ok(labeled.text.includes("姓名"));
+  assert.equal(labeled.risk.labeled, 1);
+
+  const honorific = ef.sanitizeNameText("请联系张三先生");
+  assert.equal(honorific.blocked, true);
+  assert.ok(ef.detectNameRisk("张三先生").unlabeled >= 1);
+
+  const source = {
+    utterance: "姓名：张三",
+    domain: "example.test",
+    title: "示例",
+    url: "https://example.test/a?token=secret",
+    segments: [],
+    controls: [],
+  };
+  const pass = ef.sanitizeOutbound(source);
+  assert.equal(pass.status, "pass");
+  assert.ok(!JSON.stringify(pass.payload).includes("张三"));
+  const blocked = ef.sanitizeOutbound({ ...source, utterance: "请联系张三先生" });
+  assert.equal(blocked.status, "blocked");
+  assert.equal(blocked.reason, "name-risk");
+});
+
+test("AT-119 出站键白名单与查询串移除", () => {
+  const outbound = ef.sanitizeOutbound({
+    utterance: "办理条件是什么",
+    domain: "example.test",
+    title: "示例",
+    url: "https://example.test/a?token=secret#x",
+    segments: [],
+    controls: [],
+    slots: { object: "13800138000" },
+  });
+  assert.equal(outbound.status, "pass");
+  assert.deepEqual(Object.keys(outbound.payload).sort(), [
+    "controls",
+    "page",
+    "segments",
+    "truncated",
+    "utterance",
+  ]);
+  assert.equal("slots" in outbound.payload, false);
+  assert.equal("bytes" in outbound.payload, false);
+  assert.ok(!JSON.stringify(outbound.payload).includes("token=secret"));
+  assert.ok(!JSON.stringify(outbound.payload).includes("13800138000"));
+  assert.ok(!("slots" in outbound.payload));
+});
+
+test("AT-120 模型无依据与不安全文本整体回退", async () => {
+  const title = makeItem(1, "办理条件", { type: "heading", elementId: "ef-h-1" });
+  const body = makeItem(2, "年满80周岁可以申请。", { elementId: "ef-p-2" });
+  const safe = makeControl(1, "选择日期", "button", { kind: "date" });
+  const snapshot = makePageSnapshot([title, body], {
+    segments: [makeSegment(1, title, [body])],
+    controls: [safe],
+  });
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ result: { kind: "answer", text: "年满80周岁可以申请。", segmentIds: [] } }) });
+    const model = new ef.ModelDialogueEngine();
+    await assert.rejects(
+      () => model.respond(makeRequest("申请条件是什么", snapshot)),
+      /model-fallback:ungrounded/,
+    );
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ result: { kind: "step", text: "请提交申请。", controlId: safe.controlId } }) });
+    await assert.rejects(
+      () => model.respond(makeRequest("下一步点哪里", snapshot)),
+      /model-fallback:unsafe-instruction/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("AT-121 代理仅本机且拒绝越权载荷", () => {
+  assert.equal(proxyLib.isLocalHostHeader("127.0.0.1:8765"), true);
+  assert.equal(proxyLib.isLocalHostHeader("localhost:8765"), true);
+  assert.equal(proxyLib.isLocalHostHeader("evil.example:8765"), false);
+  assert.equal(proxyLib.isAllowedOrigin("chrome-extension://abc", "abc"), true);
+  assert.equal(proxyLib.isAllowedOrigin("https://evil.test", "abc"), false);
+  assert.equal(proxyLib.isAllowedOrigin("", "abc"), false);
+  assert.equal(proxyLib.validateProxyPayload({ slots: {} }).ok, false);
+  assert.equal(proxyLib.validateProxyPayload({ bytes: 1 }).ok, false);
+  assert.equal(proxyLib.validateProxyPayload({ utterance: "问题", page: {}, segments: [], controls: [] }).ok, true);
+  const headers = proxyLib.corsHeaders("chrome-extension://abc", true);
+  assert.equal(headers["Access-Control-Allow-Origin"], "chrome-extension://abc");
+  assert.equal(headers["Access-Control-Allow-Private-Network"], "true");
+  assert.equal(proxyLib.classifyProxyError(new Error("request-too-large")), "request-too-large");
+  assert.equal(proxyLib.classifyProxyError(new Error("provider-http-500")), "upstream-error");
+  assert.equal(proxyLib.PROXY_HOST, "127.0.0.1");
+  assert.equal(proxyLib.PROXY_TIMEOUT_MS, 10000);
+});
+
+test("AT-122 回退原因与就绪门控已接线", async () => {
+  assert.equal(ef.fallbackReasonOf(new ef.ModelFallbackError("timeout")), "timeout");
+  assert.equal(ef.fallbackReasonOf(new ef.ModelFallbackError("outbound-blocked")), "outbound-blocked");
+  assert.ok(ef.fallbackNotice("timeout").includes("本地规则"));
+  const hook = await readFile(
+    join(root, "src", "sidepanel", "hooks", "useConversation.ts"),
+    "utf8",
+  );
+  assert.ok(hook.includes("shouldUseOnlineModel"));
+  assert.ok(hook.includes("fallbackNotice"));
+  assert.ok(hook.includes("modelFallbackNotified"));
+  assert.ok(hook.includes("modelReadyRef"));
+  const app = await readFile(join(root, "src", "sidepanel", "App.tsx"), "utf8");
+  assert.ok(app.includes("modelMode.ready"));
+});
+
+test("AT-123 紫色系 token 与既有视觉约束", async () => {
+  const css = await readFile(
+    join(root, "src", "sidepanel", "styles", "sidepanel.css"),
+    "utf8",
+  );
+  assert.equal((css.match(/:root\s*\{/g) ?? []).length, 1);
+  assert.ok(css.includes("--ef-primary: #5b42ed"));
+  assert.ok(css.includes("linear-gradient(135deg, #4f46e5"));
+  assert.ok(css.includes("--ef-bg: #faf8ff"));
+  assert.ok(css.includes("--ef-text: #1f1a38"));
+  assert.ok(css.includes("--ef-muted: #5b5378"));
+  assert.ok(css.includes('--ef-border-strong: #8f7fd6'));
+  assert.ok(css.includes("--ef-font-body: 18px"));
+  assert.ok(css.includes("--ef-font-current: 22px"));
+  assert.ok(css.includes("--ef-primary-min-h: 48px"));
+  assert.ok(css.includes("--ef-tap-min: 44px"));
+  assert.ok(css.includes(":focus-visible"));
+  assert.ok(css.includes("prefers-reduced-motion: reduce"));
 });

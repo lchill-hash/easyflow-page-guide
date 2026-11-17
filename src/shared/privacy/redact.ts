@@ -2,6 +2,7 @@ import { MAX_OUTBOUND_CHARS, MAX_OUTBOUND_CONTROLS, MAX_OUTBOUND_SEGMENTS } from
 import type { PageControl, SemanticSegment, Slots } from "../types";
 import { detectSensitive } from "./detect";
 import type { SensitiveHit, SensitiveKind } from "./detect";
+import { detectNameRisk, sanitizeNameText } from "./name";
 
 const PLACEHOLDER: Record<SensitiveKind, string> = {
   "id-card": "证件号",
@@ -13,7 +14,7 @@ const PLACEHOLDER: Record<SensitiveKind, string> = {
 };
 
 export const PROXY_CONTRACT = {
-  endpoint: "POST {PROXY_BASE_URL}/v1/dialogue",
+  endpoint: "POST http://127.0.0.1:8765/v1/dialogue",
   localOnly: true,
   timeoutMs: 8000,
   requestsPerMinute: 20,
@@ -23,7 +24,7 @@ export const PROXY_CONTRACT = {
     "EASYFLOW_MODEL_NAME",
     "EASYFLOW_MODEL_TIMEOUT_MS",
     "EASYFLOW_MODEL_MAX_OUTPUT_TOKENS",
-    "EASYFLOW_PROXY_ALLOWLIST",
+    "EASYFLOW_EXTENSION_ID",
   ],
   audit: "仅记录请求 ID、耗时、字节数、拒绝原因，不记录正文",
 } as const;
@@ -78,26 +79,29 @@ export interface OutboundSource {
 
 export interface OutboundPayload {
   utterance: string;
-  slots: Slots;
   page: { domain: string; title: string; url: string };
   segments: Array<{ segmentId: string; text: string }>;
-  controls: Array<{ label: string; controlType: string }>;
+  controls: Array<{ controlId: string; label: string; controlType: string; kind: string; disabled: boolean; risky: boolean }>;
   truncated: boolean;
-  bytes: number;
 }
 
 export type OutboundResult =
   | { status: "pass"; payload: OutboundPayload }
   | { status: "blocked"; reason: string };
 
-function outboundBytes(payload: Omit<OutboundPayload, "bytes">): number {
-  return new TextEncoder().encode(JSON.stringify(payload)).length;
-}
-
 export function sanitizeOutbound(source: OutboundSource): OutboundResult {
   let truncated = false;
   let usedChars = 0;
   const segments: Array<{ segmentId: string; text: string }> = [];
+
+  const utterance = sanitizeNameText(redactText(source.utterance));
+  if (utterance.blocked) {
+    return { status: "blocked", reason: "name-risk" };
+  }
+  const title = sanitizeNameText(redactText(source.title));
+  if (title.blocked) {
+    return { status: "blocked", reason: "name-risk" };
+  }
 
   for (const segment of source.segments.slice(0, MAX_OUTBOUND_SEGMENTS)) {
     const remaining = MAX_OUTBOUND_CHARS - usedChars;
@@ -105,7 +109,12 @@ export function sanitizeOutbound(source: OutboundSource): OutboundResult {
       truncated = true;
       break;
     }
-    const text = redactText(segment.text).slice(0, remaining);
+    const sanitized = sanitizeNameText(redactText(segment.text));
+    if (sanitized.blocked) {
+      truncated = true;
+      continue;
+    }
+    const text = sanitized.text.slice(0, remaining);
     if (text.length < segment.text.length) {
       truncated = true;
     }
@@ -115,36 +124,37 @@ export function sanitizeOutbound(source: OutboundSource): OutboundResult {
 
   const controls = source.controls
     .slice(0, MAX_OUTBOUND_CONTROLS)
-    .map((control) => ({ label: redactText(control.label), controlType: control.controlType }));
+    .flatMap((control) => {
+      const label = sanitizeNameText(redactText(control.label));
+      if (label.blocked) {
+        return [];
+      }
+      return [{
+        controlId: control.controlId,
+        label: label.text,
+        controlType: control.controlType,
+        kind: control.kind ?? "generic",
+        disabled: control.disabled === true,
+        risky: control.riskFlags.length > 0 || control.ambiguous || control.visibility !== "visible",
+      }];
+    });
 
-  const slots: Slots = {};
-  const sourceSlots = source.slots ?? {};
-  for (const key of Object.keys(sourceSlots) as Array<keyof Slots>) {
-    const value = sourceSlots[key];
-    if (typeof value === "string") {
-      slots[key] = redactText(value);
-    }
-  }
-
-  const payload: Omit<OutboundPayload, "bytes"> = {
-    utterance: redactText(source.utterance),
-    slots,
+  const payload: OutboundPayload = {
+    utterance: utterance.text,
     page: {
       domain: source.domain,
-      title: redactText(source.title),
+      title: title.text,
       url: redactUrl(source.url),
     },
     segments,
     controls,
     truncated,
   };
-  const bytes = outboundBytes(payload);
-  const result = { ...payload, bytes };
-  const check = assertNoSensitive(result);
+  const check = assertNoSensitive(payload);
   if (check.status === "blocked") {
     return check;
   }
-  return { status: "pass", payload: result };
+  return { status: "pass", payload };
 }
 
 export function assertNoSensitive(payload: unknown): OutboundResult | { status: "pass" } {
@@ -159,6 +169,9 @@ export function assertNoSensitive(payload: unknown): OutboundResult | { status: 
   }
   if (detectSensitive(serialized).length > 0) {
     return { status: "blocked", reason: "sensitive-data-detected" };
+  }
+  if (detectNameRisk(serialized).unlabeled > 0) {
+    return { status: "blocked", reason: "name-risk" };
   }
   return { status: "pass" };
 }

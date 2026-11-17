@@ -1,4 +1,4 @@
-export const CONTENT_VERSION = "0.3.0";
+export const CONTENT_VERSION = "0.4.0";
 
 export const MAX_ITEMS = 3000;
 export const MAX_TEXT_LENGTH = 300;
@@ -11,8 +11,13 @@ export const COLLECT_TIMEOUT_MS = 3000;
 export const LOCATE_TIMEOUT_MS = 1000;
 export const PING_TIMEOUT_MS = 300;
 export const HIGHLIGHT_TTL_MS = 4000;
-export const HIGHLIGHT_PULSE_DURATION_MS = 750;
+export const HIGHLIGHT_PULSE_DURATION_MS = 600;
 export const HIGHLIGHT_PULSE_COUNT = 3;
+export const HIGHLIGHT_STATIC_MIN_MS = 1600;
+export const HIGHLIGHT_BOX_POOL_MAX = 60;
+export const HIGHLIGHT_HOST_ATTR = "data-ef-highlight";
+export const HIGHLIGHT_ROUND_ATTR = "data-ef-round";
+export const HIGHLIGHT_STATS_SERIALIZED_MAX_CHARS = 1024;
 
 export const MAX_TURN_CHARS = 500;
 export const MAX_CONTEXT_TURNS = 6;

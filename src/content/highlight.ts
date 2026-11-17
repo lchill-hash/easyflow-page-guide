@@ -1,10 +1,29 @@
 import {
+  CONTENT_VERSION,
+  HIGHLIGHT_BOX_POOL_MAX,
+
+  HIGHLIGHT_HOST_ATTR,
   HIGHLIGHT_PULSE_COUNT,
   HIGHLIGHT_PULSE_DURATION_MS,
+  HIGHLIGHT_ROUND_ATTR,
   HIGHLIGHT_TTL_MS,
 } from "../shared/constants";
 import { isValidDomPath, normalizeWhitespace, textHash } from "../shared/domPath";
-import type { ElementRef, HighlightResult, ViewportRect } from "../shared/types";
+import type {
+  CleanupReason,
+  ElementRef,
+  HighlightResult,
+  HighlightStats,
+  ViewportRect,
+} from "../shared/types";
+import {
+  createRoundState,
+  isPulsing,
+  reduceRound,
+  type RoundConfig,
+  type RoundEvent,
+  type HighlightRoundState,
+} from "./highlightRound";
 import { lookup } from "./registry";
 
 type LocateOutcome =
@@ -19,7 +38,6 @@ export interface PageBox {
   height: number;
 }
 
-const MAX_HIGHLIGHT_BOXES = 60;
 const BOX_PADDING = 2;
 const MERGE_GAP = 8;
 
@@ -28,36 +46,88 @@ const HIGHLIGHT_CARE_BORDER_WIDTH = "4px";
 const HIGHLIGHT_BORDER_STYLE = "solid";
 const HIGHLIGHT_BORDER_RADIUS = "4px";
 const HIGHLIGHT_EASING = "ease-in-out";
-const HIGHLIGHT_CARE_BORDER = "rgb(49, 46, 129)";
-const HIGHLIGHT_CARE_FILL = "rgba(79, 70, 229, 0.22)";
-const HIGHLIGHT_CARE_GLOW = "0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 6px rgba(79, 70, 229, 0.35)";
+const HIGHLIGHT_CARE_BORDER = "rgb(30, 41, 89)";
+const HIGHLIGHT_CARE_FILL = "rgba(49, 46, 129, 0.18)";
+const HIGHLIGHT_CARE_GLOW = "0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 6px rgba(49, 46, 129, 0.35)";
 
 const HIGHLIGHT_COLORS = {
-  border: "rgba(76, 29, 149, 0.95)",
-  borderPeak: "rgb(49, 20, 110)",
-  fillBase: "rgba(139, 92, 246, 0.14)",
-  fillPeak: "rgba(196, 181, 253, 0.36)",
-  fillStatic: "rgba(139, 92, 246, 0.30)",
-  glowBase: "0 0 0 1px rgba(255, 255, 255, 0.9), 0 0 8px rgba(124, 58, 237, 0.22)",
+  border: "rgba(49, 46, 129, 0.95)",
+  borderPeak: "rgb(30, 41, 89)",
+  fillBase: "rgba(79, 70, 229, 0.12)",
+  fillPeak: "rgba(129, 140, 248, 0.30)",
+  fillStatic: "rgba(79, 70, 229, 0.22)",
+  glowBase: "0 0 0 1px rgba(255, 255, 255, 0.9), 0 0 8px rgba(79, 70, 229, 0.18)",
   glowPeak:
-    "0 0 0 1px rgba(255, 255, 255, 0.95), 0 0 20px rgba(124, 58, 237, 0.50), 0 0 28px rgba(250, 204, 21, 0.22)",
-  glowStatic: "0 0 0 1px rgba(255, 255, 255, 0.95), 0 0 16px rgba(124, 58, 237, 0.42)",
+    "0 0 0 1px rgba(255, 255, 255, 0.95), 0 0 20px rgba(79, 70, 229, 0.40), 0 0 28px rgba(13, 148, 136, 0.18)",
+  glowStatic: "0 0 0 1px rgba(255, 255, 255, 0.95), 0 0 16px rgba(79, 70, 229, 0.30)",
 } as const;
 
-let overlayHost: HTMLDivElement | null = null;
-let overlayShadow: ShadowRoot | null = null;
-let overlayBoxes: HTMLDivElement[] = [];
-let activeRange: Range | null = null;
-let targetElement: Element | null = null;
-let cleanupTimer: number | null = null;
+interface OverlaySession {
+  host: HTMLDivElement;
+  shadow: ShadowRoot;
+  boxes: HTMLDivElement[];
+  range: Range | null;
+  target: Element;
+  roundId: number;
+  care: boolean;
+  animations: Animation[];
+}
+
+let session: OverlaySession | null = null;
+let roundState: HighlightRoundState = createRoundState();
+let refCalls = 0;
 let frameRequest: number | null = null;
-let activeCareMode = false;
+let ttlTimer: number | null = null;
+let lastUiMode: "normal" | "care" = "normal";
+let lastReducedMotion = false;
+
+function now(): number {
+  return performance.now();
+}
 
 function prefersReducedMotion(): boolean {
   return (
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
+}
+
+function dispatch(event: RoundEvent): void {
+  roundState = reduceRound(roundState, event);
+}
+
+function snapshotStats(mode: "normal" | "care"): HighlightStats {
+  const counters = roundState.counters;
+  const timing = roundState.timing;
+  return {
+    refCalls,
+    roundStartCount: counters.roundStartCount,
+    pulseStartCount: counters.pulseStartCount,
+    pulseCompletedCount: counters.pulseCompletedCount,
+    overlayCreateCount: counters.overlayCreateCount,
+    overlayLiveCount: counters.overlayLiveCount,
+    overlayLiveMax: counters.overlayLiveMax,
+    legacyHostCount: counters.legacyHostCount,
+    cleanupScheduledCount: counters.cleanupScheduledCount,
+    cleanupFiredCount: counters.cleanupFiredCount,
+    cleanupReplacedCount: counters.cleanupReplacedCount,
+    cleanupNoopCount: counters.cleanupNoopCount,
+    cleanupReason: timing.lastCleanupReason,
+    positionUpdateCount: counters.positionUpdateCount,
+    domTickCount: counters.domTickCount,
+    boxCreateCount: counters.boxCreateCount,
+    boxRemoveCount: counters.boxRemoveCount,
+    boxCount: counters.boxCount,
+    uiModeAtRequest: mode,
+    reducedMotionAtRequest: lastReducedMotion,
+    lastRoundStartAt: timing.lastRoundStartAt,
+    lastRoundEndAt: timing.lastRoundEndAt,
+    lastCleanupAt: timing.lastCleanupAt,
+    highlightLifetimeMs: timing.highlightLifetimeMs,
+    contentVersionSeen: "",
+    expectedContentVersion: CONTENT_VERSION,
+    pageInjectionCount: 0,
+  };
 }
 
 function visibleTextOf(element: Element): string {
@@ -155,7 +225,7 @@ export function mergeLineBoxes(boxes: PageBox[]): PageBox[] {
     merged.push({ ...box });
   }
 
-  return merged.slice(0, MAX_HIGHLIGHT_BOXES);
+  return merged.slice(0, HIGHLIGHT_BOX_POOL_MAX);
 }
 
 function readRangeBoxes(range: Range): PageBox[] {
@@ -226,21 +296,12 @@ function fallbackPageBox(element: Element): PageBox | null {
   return toPageBox(rect);
 }
 
-function applyBoxStyle(box: HTMLDivElement, care: boolean): void {
-  const staticHighlight = care || prefersReducedMotion() || typeof box.animate !== "function";
+function applyStaticStyle(box: HTMLDivElement, care: boolean): void {
   box.style.borderWidth = care ? HIGHLIGHT_CARE_BORDER_WIDTH : HIGHLIGHT_BORDER_WIDTH;
   box.style.borderStyle = HIGHLIGHT_BORDER_STYLE;
-  if (care) {
-    box.style.borderColor = HIGHLIGHT_CARE_BORDER;
-    box.style.backgroundColor = HIGHLIGHT_CARE_FILL;
-    box.style.boxShadow = HIGHLIGHT_CARE_GLOW;
-    return;
-  }
-  box.style.borderColor = HIGHLIGHT_COLORS.border;
-  box.style.backgroundColor = staticHighlight
-    ? HIGHLIGHT_COLORS.fillStatic
-    : HIGHLIGHT_COLORS.fillBase;
-  box.style.boxShadow = staticHighlight ? HIGHLIGHT_COLORS.glowStatic : HIGHLIGHT_COLORS.glowBase;
+  box.style.borderColor = care ? HIGHLIGHT_CARE_BORDER : HIGHLIGHT_COLORS.border;
+  box.style.backgroundColor = care ? HIGHLIGHT_CARE_FILL : HIGHLIGHT_COLORS.fillStatic;
+  box.style.boxShadow = care ? HIGHLIGHT_CARE_GLOW : HIGHLIGHT_COLORS.glowStatic;
 }
 
 function createBoxElement(care: boolean): HTMLDivElement {
@@ -249,63 +310,91 @@ function createBoxElement(care: boolean): HTMLDivElement {
   box.style.boxSizing = "border-box";
   box.style.pointerEvents = "none";
   box.style.borderRadius = HIGHLIGHT_BORDER_RADIUS;
-  applyBoxStyle(box, care);
+  box.style.display = "none";
+  applyStaticStyle(box, care);
   return box;
 }
 
-function restartPulse(box: HTMLDivElement, care: boolean): void {
-  applyBoxStyle(box, care);
-  for (const animation of box.getAnimations()) {
-    animation.cancel();
+function countLiveHosts(): number {
+  let live = 0;
+  for (const child of Array.from(document.documentElement.children)) {
+    if (child.hasAttribute(HIGHLIGHT_HOST_ATTR)) {
+      live += 1;
+    }
   }
-  if (care || prefersReducedMotion() || typeof box.animate !== "function") {
-    return;
-  }
-  box.animate(
-    [
-      {
-        backgroundColor: HIGHLIGHT_COLORS.fillBase,
-        borderColor: HIGHLIGHT_COLORS.border,
-        boxShadow: HIGHLIGHT_COLORS.glowBase,
-      },
-      {
-        backgroundColor: HIGHLIGHT_COLORS.fillPeak,
-        borderColor: HIGHLIGHT_COLORS.borderPeak,
-        boxShadow: HIGHLIGHT_COLORS.glowPeak,
-      },
-      {
-        backgroundColor: HIGHLIGHT_COLORS.fillBase,
-        borderColor: HIGHLIGHT_COLORS.border,
-        boxShadow: HIGHLIGHT_COLORS.glowBase,
-      },
-    ],
-    {
-      duration: HIGHLIGHT_PULSE_DURATION_MS,
-      iterations: HIGHLIGHT_PULSE_COUNT,
-      easing: HIGHLIGHT_EASING,
-    },
-  );
+  return live;
 }
 
-function ensureBoxes(count: number): void {
-  if (overlayShadow === null) {
-    return;
+function countLegacyHosts(): number {
+  let legacy = 0;
+  for (const child of Array.from(document.documentElement.children)) {
+    if (child.hasAttribute(HIGHLIGHT_HOST_ATTR)) {
+      continue;
+    }
+    const element = child as HTMLElement;
+    if (
+      element.style.position === "absolute" &&
+      element.style.zIndex === "2147483647" &&
+      element.style.pointerEvents === "none" &&
+      (element.style.width === "0px" || element.style.width === "0") &&
+      (element.style.height === "0px" || element.style.height === "0")
+    ) {
+      legacy += 1;
+    }
   }
-  while (overlayBoxes.length < count) {
-    const box = createBoxElement(activeCareMode);
-    overlayShadow.appendChild(box);
-    overlayBoxes.push(box);
-  }
-  while (overlayBoxes.length > count) {
-    const box = overlayBoxes.pop();
-    box?.remove();
-  }
+  return legacy;
 }
 
-function positionBoxes(boxes: PageBox[], animate: boolean): void {
-  ensureBoxes(boxes.length);
+function syncHosts(): void {
+  dispatch({
+    type: "hosts-measured",
+    now: now(),
+    live: countLiveHosts(),
+    legacy: countLegacyHosts(),
+  });
+}
+
+function ensureBoxPool(count: number): void {
+  if (session === null) {
+    return;
+  }
+  let created = 0;
+  while (session.boxes.length < count && session.boxes.length < HIGHLIGHT_BOX_POOL_MAX) {
+    const box = createBoxElement(session.care);
+    session.shadow.appendChild(box);
+    session.boxes.push(box);
+    created += 1;
+  }
+  for (let index = 0; index < session.boxes.length; index += 1) {
+    const box = session.boxes[index];
+    if (box === undefined) {
+      continue;
+    }
+    if (index < count) {
+      box.style.display = "block";
+    } else {
+      box.style.display = "none";
+      for (const animation of box.getAnimations()) {
+        animation.cancel();
+      }
+    }
+  }
+  dispatch({
+    type: "boxes-synced",
+    now: now(),
+    created,
+    removed: 0,
+    visible: Math.min(count, session.boxes.length),
+  });
+}
+
+function positionBoxes(boxes: PageBox[]): void {
+  if (session === null) {
+    return;
+  }
+  ensureBoxPool(boxes.length);
   for (let index = 0; index < boxes.length; index += 1) {
-    const box = overlayBoxes[index];
+    const box = session.boxes[index];
     const rect = boxes[index];
     if (box === undefined || rect === undefined) {
       continue;
@@ -315,42 +404,95 @@ function positionBoxes(boxes: PageBox[], animate: boolean): void {
     box.style.width = `${rect.width + BOX_PADDING * 2}px`;
     box.style.height = `${rect.height + BOX_PADDING * 2}px`;
   }
-  if (!animate) {
+}
+
+function startPulse(boxes: PageBox[]): void {
+  if (session === null) {
     return;
   }
-  for (const box of overlayBoxes) {
-    restartPulse(box, activeCareMode);
+  const target = session;
+  ensureBoxPool(boxes.length);
+  const startTime = document.timeline.currentTime;
+  for (let index = 0; index < boxes.length; index += 1) {
+    const box = target.boxes[index];
+    if (box === undefined) {
+      continue;
+    }
+    for (const animation of box.getAnimations()) {
+      animation.cancel();
+    }
+    const animation = box.animate(
+      [
+        {
+          backgroundColor: HIGHLIGHT_COLORS.fillBase,
+          borderColor: HIGHLIGHT_COLORS.border,
+          boxShadow: HIGHLIGHT_COLORS.glowBase,
+        },
+        {
+          backgroundColor: HIGHLIGHT_COLORS.fillPeak,
+          borderColor: HIGHLIGHT_COLORS.borderPeak,
+          boxShadow: HIGHLIGHT_COLORS.glowPeak,
+        },
+        {
+          backgroundColor: HIGHLIGHT_COLORS.fillBase,
+          borderColor: HIGHLIGHT_COLORS.border,
+          boxShadow: HIGHLIGHT_COLORS.glowBase,
+        },
+      ],
+      {
+        duration: HIGHLIGHT_PULSE_DURATION_MS,
+        iterations: HIGHLIGHT_PULSE_COUNT,
+        easing: HIGHLIGHT_EASING,
+      },
+    );
+    if (typeof startTime === "number") {
+      animation.startTime = startTime;
+    }
+    target.animations.push(animation);
   }
+  const roundId = target.roundId;
+  void Promise.allSettled(
+    target.animations.map((animation) => animation.finished.catch(() => undefined)),
+  ).then(() => {
+    if (session === null || session.roundId !== roundId || roundState.phase !== "pulsing") {
+      return;
+    }
+    dispatch({ type: "pulse-complete", now: now() });
+    for (const box of session.boxes) {
+      applyStaticStyle(box, session.care);
+    }
+    session.animations = [];
+  });
 }
 
 function updateOverlayPositions(): void {
-  if (targetElement === null || !targetElement.isConnected) {
-    cleanupHighlight();
+  if (session === null) {
     return;
   }
-
+  if (!session.target.isConnected) {
+    finish("unroute");
+    return;
+  }
   let boxes: PageBox[] = [];
-  if (activeRange !== null) {
-    if (activeRange.startContainer.isConnected) {
-      boxes = readRangeBoxes(activeRange);
-      if (boxes.length === 0) {
-        return;
-      }
+  if (session.range !== null) {
+    if (session.range.startContainer.isConnected) {
+      boxes = readRangeBoxes(session.range);
     } else {
-      activeRange = null;
+      session.range = null;
     }
   }
   if (boxes.length === 0) {
-    const fallback = fallbackPageBox(targetElement);
+    const fallback = fallbackPageBox(session.target);
     if (fallback !== null) {
       boxes = [fallback];
     }
   }
   if (boxes.length === 0) {
-    cleanupHighlight();
+    finish("unroute");
     return;
   }
-  positionBoxes(boxes, false);
+  dispatch({ type: "position-updated", now: now() });
+  positionBoxes(boxes);
 }
 
 function scheduleOverlayUpdate(): void {
@@ -363,12 +505,11 @@ function scheduleOverlayUpdate(): void {
   });
 }
 
-function createOverlay(
-  element: Element,
-  range: Range | null,
-  initialBoxes: PageBox[],
-  care: boolean,
-): void {
+function onPageHide(): void {
+  finish("pagehide");
+}
+
+function createSessionHost(roundId: number, care: boolean): { host: HTMLDivElement; shadow: ShadowRoot } {
   const host = document.createElement("div");
   host.style.position = "absolute";
   host.style.top = "0";
@@ -377,27 +518,34 @@ function createOverlay(
   host.style.height = "0";
   host.style.zIndex = "2147483647";
   host.style.pointerEvents = "none";
-
+  host.setAttribute(HIGHLIGHT_HOST_ATTR, "v1");
+  host.setAttribute(HIGHLIGHT_ROUND_ATTR, String(roundId));
   const shadow = host.attachShadow({ mode: "closed" });
   document.documentElement.appendChild(host);
-
-  overlayHost = host;
-  overlayShadow = shadow;
-  activeRange = range;
-  targetElement = element;
-  activeCareMode = care;
-
-  positionBoxes(initialBoxes, true);
-
-  window.addEventListener("scroll", scheduleOverlayUpdate, { passive: true, capture: true });
-  window.addEventListener("resize", scheduleOverlayUpdate);
-  cleanupTimer = window.setTimeout(cleanupHighlight, HIGHLIGHT_TTL_MS);
+  return { host, shadow };
 }
 
-export function cleanupHighlight(): void {
-  if (cleanupTimer !== null) {
-    window.clearTimeout(cleanupTimer);
-    cleanupTimer = null;
+function clearSessionResources(target: OverlaySession): void {
+  for (const animation of target.animations) {
+    animation.cancel();
+  }
+  for (const box of target.boxes) {
+    for (const animation of box.getAnimations()) {
+      animation.cancel();
+    }
+  }
+}
+
+function finish(reason: CleanupReason): void {
+  if (session === null) {
+    dispatch({ type: "cleanup", now: now(), reason: "noop" });
+    return;
+  }
+  const target = session;
+  clearSessionResources(target);
+  if (ttlTimer !== null) {
+    window.clearTimeout(ttlTimer);
+    ttlTimer = null;
   }
   if (frameRequest !== null) {
     window.cancelAnimationFrame(frameRequest);
@@ -405,55 +553,110 @@ export function cleanupHighlight(): void {
   }
   window.removeEventListener("scroll", scheduleOverlayUpdate, true);
   window.removeEventListener("resize", scheduleOverlayUpdate);
-  if (overlayHost !== null) {
-    overlayHost.remove();
+  window.removeEventListener("pagehide", onPageHide);
+  target.host.remove();
+  session = null;
+  dispatch({ type: "cleanup", now: now(), reason });
+  syncHosts();
+}
+
+export function cleanupHighlight(reason: CleanupReason = "noop"): void {
+  finish(reason);
+}
+
+export function noteDomTick(): void {
+  dispatch({ type: "dom-tick", now: now() });
+}
+
+function measure(element: Element): { range: Range | null; boxes: PageBox[] } | null {
+  element.scrollIntoView({
+    block: "center",
+    inline: "nearest",
+    behavior: "auto",
+  });
+  const textHighlight = buildTextHighlight(element);
+  let boxes: PageBox[] = textHighlight?.boxes ?? [];
+  if (boxes.length === 0) {
+    const fallback = fallbackPageBox(element);
+    if (fallback !== null) {
+      boxes = [fallback];
+    }
   }
-  overlayHost = null;
-  overlayShadow = null;
-  overlayBoxes = [];
-  activeRange = null;
-  targetElement = null;
-  activeCareMode = false;
+  if (boxes.length === 0) {
+    return null;
+  }
+  return { range: textHighlight?.range ?? null, boxes };
 }
 
 export function highlightRef(
   ref: ElementRef,
   mode: "normal" | "care" = "normal",
 ): HighlightResult {
-  cleanupHighlight();
-
+  refCalls += 1;
+  if (session !== null) {
+    finish("replaced");
+  }
   const located = locate(ref);
   if (located.status === "stale") {
-    return { status: "stale" };
+    return { status: "stale", stats: snapshotStats(mode) };
   }
   if (located.status === "folded") {
-    return { status: "folded" };
+    return { status: "folded", stats: snapshotStats(mode) };
   }
 
   const element = located.element;
-  const textHighlight = buildTextHighlight(element);
-  let initialBoxes: PageBox[] = textHighlight?.boxes ?? [];
-  if (initialBoxes.length === 0) {
-    const fallback = fallbackPageBox(element);
-    if (fallback !== null) {
-      initialBoxes = [fallback];
-    }
-  }
-  if (initialBoxes.length === 0) {
-    return { status: "stale" };
+  const measured = measure(element);
+  if (measured === null) {
+    return { status: "stale", stats: snapshotStats(mode) };
   }
 
-  const reducedMotion = prefersReducedMotion();
   const care = mode === "care";
-  element.scrollIntoView({
-    block: "center",
-    inline: "nearest",
-    behavior: care || reducedMotion ? "auto" : "smooth",
-  });
-  createOverlay(element, textHighlight?.range ?? null, initialBoxes, care);
+  const reducedMotion = prefersReducedMotion();
+  lastUiMode = mode;
+  lastReducedMotion = reducedMotion;
+  const roundId = roundState.roundId + 1;
+  const { host, shadow } = createSessionHost(roundId, care);
+  session = {
+    host,
+    shadow,
+    boxes: [],
+    range: measured.range,
+    target: element,
+    roundId,
+    care,
+    animations: [],
+  };
+
+  const config: RoundConfig = {
+    pulseDurationMs: HIGHLIGHT_PULSE_DURATION_MS,
+    pulseCount: HIGHLIGHT_PULSE_COUNT,
+    ttlMs: HIGHLIGHT_TTL_MS,
+    care,
+    reducedMotion,
+    supportsAnimate: typeof host.animate === "function" || typeof HTMLDivElement.prototype.animate === "function",
+  };
+  const pulsing = isPulsing(config);
+  dispatch({ type: "round-start", now: now(), config });
+  positionBoxes(measured.boxes);
+  syncHosts();
+  if (pulsing) {
+    startPulse(measured.boxes);
+  } else {
+    for (const box of session.boxes) {
+      applyStaticStyle(box, care);
+    }
+  }
+
+  window.addEventListener("scroll", scheduleOverlayUpdate, { passive: true, capture: true });
+  window.addEventListener("resize", scheduleOverlayUpdate);
+  window.addEventListener("pagehide", onPageHide);
+  ttlTimer = window.setTimeout(() => {
+    finish("ttl");
+  }, HIGHLIGHT_TTL_MS);
 
   return {
     status: "highlighted",
     rect: rectOf(element),
+    stats: snapshotStats(lastUiMode),
   };
 }

@@ -27,7 +27,7 @@ import type {
   WatchStartRequest,
   WatchStopRequest,
 } from "../shared/messages";
-import { ensureInjected, getLastInjectionError } from "./injector";
+import { ensureInjected, getInjectionDiagnostics, getLastInjectionError } from "./injector";
 import { getActiveTab } from "./tabContext";
 
 let memoryGoal: string | null = null;
@@ -228,7 +228,20 @@ async function handleHighlight(request: HighlightRequest): Promise<EfResponse<Hi
       LOCATE_TIMEOUT_MS,
       "EF-E008",
     );
-    return ok(request.requestId, data);
+    const injection = getInjectionDiagnostics(request.tabId);
+    const payload =
+      data.stats === undefined
+        ? data
+        : {
+            ...data,
+            stats: {
+              ...data.stats,
+              pageInjectionCount: injection.pageInjectionCount,
+              contentVersionSeen: injection.contentVersionSeen,
+              expectedContentVersion: injection.expectedContentVersion,
+            },
+          };
+    return ok(request.requestId, payload);
   } catch (error) {
     if (isEfError(error)) {
       return fail(request.requestId, withInjectionDetail(request.tabId, error));
