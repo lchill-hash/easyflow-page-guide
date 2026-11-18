@@ -121,7 +121,7 @@ export interface SpeakOptions {
 export type SynthesisEvent =
   | { type: "started" }
   | { type: "ended" }
-  | { type: "error"; kind: "unsupported" | "unknown" };
+  | { type: "error"; kind: "unsupported" | "interrupted" | "unknown" };
 
 export interface SynthesisAdapter {
   speak(options: SpeakOptions): void;
@@ -144,7 +144,7 @@ export interface UtteranceLike {
   voice: SpeechVoiceLike | null;
   onstart: (() => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event?: { error?: string }) => void) | null;
 }
 
 export interface UtteranceCtorLike {
@@ -178,6 +178,8 @@ export type VoiceInputIssue =
   | "permission-conflict";
 
 export type SpeakTextKind = "step-action" | "direct-answer";
+
+export type SpeechSpeed = "normal" | "slow";
 
 export interface SpeakRequest {
   kind: SpeakTextKind;

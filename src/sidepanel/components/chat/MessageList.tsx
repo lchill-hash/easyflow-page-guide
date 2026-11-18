@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AssistantMessage,
   CitationAnchor,
@@ -13,6 +13,7 @@ import { StepCard } from "./StepCard";
 import { AnswerSpeechButton } from "./StepCardSpeech";
 import { stripDuplicateStepText } from "./messageText";
 import { buildStepCardCopy } from "./stepCardCopy";
+import { Icon } from "./Icon";
 
 interface MessageListProps {
   messages: DialogueMessage[];
@@ -87,9 +88,14 @@ function AssistantBubble({
   const bubbleClass = dedupe.hidden
     ? "ef-bubble ef-bubble-assistant ef-bubble-card-only"
     : "ef-bubble ef-bubble-assistant";
+  const messageKind = cardActive
+    ? "逐步指引"
+    : message.citations.length > 0
+      ? message.citations.some((citation) => citation.status === "valid") ? "依据当前页" : "历史回答"
+      : "页面助手";
   return (
     <div className="ef-message ef-message-assistant">
-      <div className="ef-message-role">EasyFlow</div>
+      <div className="ef-message-role"><span className="ef-mini-brand" aria-hidden="true">e</span>EasyFlow <span>· {messageKind}</span></div>
       <div className={bubbleClass}>
         {dedupe.hidden ? null : <div className="ef-assistant-text">{dedupe.text}</div>}
         {message.limitation !== undefined ? (
@@ -97,7 +103,7 @@ function AssistantBubble({
         ) : null}
         {message.canRetry === true ? (
           <button type="button" className="ef-inline-link" onClick={onRetry}>
-            重试
+            <Icon name="refresh" />重新读取当前页
           </button>
         ) : null}
         {message.clarify?.options !== undefined && message.clarify.options.length > 0 ? (
@@ -125,7 +131,7 @@ function AssistantBubble({
             text={message.text}
           />
         ) : null}
-        {message.citations.length > 0 ? (
+        {message.citations.length > 0 && !cardActive ? (
           <EvidencePanel citations={message.citations} onLocate={onCitation} />
         ) : null}
         {message.targetControl !== undefined && message.completionCondition !== undefined ? (
@@ -174,24 +180,44 @@ export function MessageList({
   const endRef = useRef<HTMLDivElement>(null);
   const currentCardRef = useRef<HTMLDivElement>(null);
   const lastScrolledCardId = useRef<string | null>(null);
+  const lastAnnouncedId = useRef<string | null>(null);
+  const [announcement, setAnnouncement] = useState<{ id: string; text: string } | null>(null);
+  const latestMessageId = messages.at(-1)?.messageId;
 
   useEffect(() => {
-    if (currentCardMessageId !== null) {
-      if (lastScrolledCardId.current === currentCardMessageId) {
-        return;
-      }
+    if (currentCardMessageId !== null && lastScrolledCardId.current !== currentCardMessageId) {
       lastScrolledCardId.current = currentCardMessageId;
       currentCardRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
       return;
     }
+    if (currentCardMessageId === null) lastScrolledCardId.current = null;
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [currentCardMessageId, messages.length]);
+  }, [currentCardMessageId, latestMessageId]);
+
+  useEffect(() => {
+    const latest = messages.at(-1);
+    if (latest === undefined || latest.role === "user" || latest.messageId === lastAnnouncedId.current) return;
+    lastAnnouncedId.current = latest.messageId;
+    const currentCopy = latest.role === "assistant" && latest.messageId === currentCardMessageId && activeStep !== null
+      ? buildStepCardCopy({ targetControl: activeStep.targetControl, snapshot, completionCondition: activeStep.completion })
+      : null;
+    const text = currentCopy === null ? latest.text : `当前一步：${currentCopy.shortText}`;
+    setAnnouncement({ id: latest.messageId, text: `${latest.role === "assistant" ? "EasyFlow：" : ""}${text}` });
+  }, [latestMessageId, messages, currentCardMessageId, activeStep, snapshot]);
 
   return (
-    <div className="ef-message-list" aria-live="polite">
+    <div className="ef-message-list">
+      <div className="ef-sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {announcement === null ? null : <span key={announcement.id}>{announcement.text}</span>}
+      </div>
       {messages.length === 0 ? (
         <div className="ef-welcome">
-          你好，我可以回答这个页面上的问题，也可以一步一步陪你办。
+          <div className="ef-welcome-icon"><Icon name="message" /></div>
+          <h2 className="ef-welcome-title">这一页，<br />有什么想问的？</h2>
+          <p className="ef-welcome-description">我可以解释页面上的内容，<br />也可以一步一步陪你操作。</p>
+          <div className="ef-welcome-prompts">
+            {["这个页面讲了什么？", "我想在这个页面办事"].map((prompt) => <button type="button" className="ef-quick-option" key={prompt} onClick={() => onSend(prompt)}>{prompt}<Icon name="chevron" /></button>)}
+          </div>
         </div>
       ) : null}
       {messages.map((message) => {

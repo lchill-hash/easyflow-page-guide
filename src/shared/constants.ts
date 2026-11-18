@@ -1,4 +1,4 @@
-export const CONTENT_VERSION = "0.4.0";
+export const CONTENT_VERSION = "0.3.0";
 
 export const MAX_ITEMS = 3000;
 export const MAX_TEXT_LENGTH = 300;

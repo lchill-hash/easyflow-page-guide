@@ -67,7 +67,7 @@ await build({
       'export { detectNameRisk, redactLabeledNames, sanitizeNameText } from "./src/shared/privacy/name.ts";',
       'export { ModelFallbackError, shouldUseOnlineModel, fallbackNotice, fallbackReasonOf } from "./src/shared/model/fallback.ts";',
       'export { PROXY_CONTRACT } from "./src/shared/privacy/redact.ts";',
-    ].join("\n"),
+    ].join("\n").replaceAll('from "./', `from "${root.replaceAll("\\", "/")}/`),
     resolveDir: root,
     sourcefile: "selftest-entry.ts",
     loader: "ts",
@@ -546,7 +546,7 @@ test("AT-21/22 在线模型代理响应与非法引用被拒绝", async () => {
   globalThis.fetch = async (_url, options) => {
     outboundBody = String(options.body);
     return { ok: true, json: async () => ({ result: {
-      kind: "clarify", text: "请告诉我想了解什么。", question: "你想了解哪一项？",
+      kind: "clarify", answer: "请告诉我想了解什么。", evidence: [], question: "你想了解哪一项？",
     } }) };
   };
   let response;
@@ -582,7 +582,7 @@ test("AT-21/22 在线模型代理响应与非法引用被拒绝", async () => {
   assert.equal(validation.reason, "citation-missing");
 });
 
-test("AT-115 在线模型只接受当前页引用与安全控件", async () => {
+test("AT-115 云端模型只接受当前页精确引用，步骤由本地引擎处理", async () => {
   const title = makeItem(1, "办理条件", { type: "heading", elementId: "ef-h-1" });
   const body = makeItem(2, "年满80周岁可以申请。", { elementId: "ef-p-2" });
   const safe = makeControl(1, "选择日期", "button", { kind: "date" });
@@ -591,7 +591,7 @@ test("AT-115 在线模型只接受当前页引用与安全控件", async () => {
     segments: [makeSegment(1, title, [body])], controls: [safe, disabled],
   });
   const originalFetch = globalThis.fetch;
-  let reply = { kind: "answer", text: "年满80周岁可以申请。", segmentIds: ["seg-1"] };
+  let reply = { kind: "answer", answer: "年满80周岁可以申请。", evidence: [{segmentId:"seg-1",quote:"年满80周岁可以申请。"}] };
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ result: reply }) });
   try {
     const model = new ef.ModelDialogueEngine();
@@ -600,12 +600,9 @@ test("AT-115 在线模型只接受当前页引用与安全控件", async () => {
     assert.equal(answer.responseType, "direct-answer");
     assert.equal(ef.validateResponse(answer, snapshot, null).status, "passed");
     reply = { kind: "step", text: "请先选择日期。", controlId: safe.controlId };
-    const step = await model.respond(request);
-    assert.equal(step.responseType, "next-step");
-    assert.equal(step.targetControl.controlId, safe.controlId);
-    assert.equal(ef.validateResponse(step, snapshot, null).status, "passed");
+    await assert.rejects(() => model.respond(request), /model-fallback:/);
     reply = { kind: "step", text: "请选择已约满时段。", controlId: disabled.controlId };
-    await assert.rejects(() => model.respond(request), /model-fallback:unsafe-control/);
+    await assert.rejects(() => model.respond(request), /model-fallback:/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -3152,7 +3149,7 @@ test("AT-50 样式 token、偏好契约与源码清洁", async () => {
     "--ef-primary-min-h: 48px",
     "--ef-tap-min: 44px",
     "prefers-reduced-motion: reduce",
-    "max-height: 40vh",
+    "max-height: 36vh",
     "100dvh",
     ":focus-visible",
   ]) {
@@ -3763,7 +3760,7 @@ test("AT-106 高亮单轮状态机与计数不变式", () => {
 });
 
 test("AT-107 高亮常量关系与静态实现约束", async () => {
-  assert.equal(ef.CONTENT_VERSION, "0.4.0");
+  assert.equal(ef.CONTENT_VERSION, "0.3.0");
   assert.equal(ef.HIGHLIGHT_PULSE_DURATION_MS, 600);
   assert.equal(ef.HIGHLIGHT_PULSE_COUNT, 3);
   assert.equal(ef.HIGHLIGHT_PULSE_DURATION_MS * ef.HIGHLIGHT_PULSE_COUNT, 1800);
@@ -3907,8 +3904,8 @@ test("AT-111 高亮统计只含计数与时间", async () => {
     lastRoundEndAt: 1900,
     lastCleanupAt: 4100,
     highlightLifetimeMs: 4000,
-    contentVersionSeen: "0.4.0",
-    expectedContentVersion: "0.4.0",
+    contentVersionSeen: "0.3.0",
+    expectedContentVersion: "0.3.0",
     pageInjectionCount: 1,
   };
   assert.equal(Object.keys(stats).length, 27);
@@ -3937,7 +3934,7 @@ test("AT-112 侧栏 CSS 单 token 源与视觉约束", async () => {
   assert.ok(css.includes("--ef-font-current: 22px"));
   assert.ok(css.includes("--ef-primary-min-h: 48px"));
   assert.ok(css.includes("--ef-tap-min: 44px"));
-  assert.ok(css.includes("linear-gradient(135deg, #4f46e5"));
+  assert.ok(css.includes("linear-gradient(145deg, #ffffff 40%, #faf7ff)"));
   assert.ok(css.includes("--ef-primary: #5b42ed"));
   assert.ok(css.includes("@media (max-width: 420px)"));
   assert.ok(css.includes("@media (max-width: 320px)"));
@@ -4108,7 +4105,7 @@ test("AT-120 模型无依据与不安全文本整体回退", async () => {
   });
   const originalFetch = globalThis.fetch;
   try {
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({ result: { kind: "answer", text: "年满80周岁可以申请。", segmentIds: [] } }) });
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ result: { kind: "answer", answer: "年满80周岁可以申请。", evidence: [] } }) });
     const model = new ef.ModelDialogueEngine();
     await assert.rejects(
       () => model.respond(makeRequest("申请条件是什么", snapshot)),
@@ -4117,7 +4114,7 @@ test("AT-120 模型无依据与不安全文本整体回退", async () => {
     globalThis.fetch = async () => ({ ok: true, json: async () => ({ result: { kind: "step", text: "请提交申请。", controlId: safe.controlId } }) });
     await assert.rejects(
       () => model.respond(makeRequest("下一步点哪里", snapshot)),
-      /model-fallback:unsafe-instruction/,
+      /model-fallback:/,
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -4166,15 +4163,19 @@ test("AT-123 紫色系 token 与既有视觉约束", async () => {
   );
   assert.equal((css.match(/:root\s*\{/g) ?? []).length, 1);
   assert.ok(css.includes("--ef-primary: #5b42ed"));
-  assert.ok(css.includes("linear-gradient(135deg, #4f46e5"));
+  assert.ok(css.includes("linear-gradient(145deg, #ffffff 40%, #faf7ff)"));
   assert.ok(css.includes("--ef-bg: #faf8ff"));
   assert.ok(css.includes("--ef-text: #1f1a38"));
-  assert.ok(css.includes("--ef-muted: #5b5378"));
-  assert.ok(css.includes('--ef-border-strong: #8f7fd6'));
+  assert.ok(css.includes("--ef-muted: #756581"));
+  assert.ok(css.includes('--ef-border-strong: #d4c5e8'));
   assert.ok(css.includes("--ef-font-body: 18px"));
   assert.ok(css.includes("--ef-font-current: 22px"));
   assert.ok(css.includes("--ef-primary-min-h: 48px"));
   assert.ok(css.includes("--ef-tap-min: 44px"));
+  assert.ok(/\.ef-senior-quick-actions button,\s*\.ef-senior-progress-actions > button,\s*\.ef-senior-help > button\s*\{[^}]*min-height:\s*max\(42px, var\(--ef-tap-min\)\)/s.test(css));
+  assert.ok(/\.ef-senior-questions button\s*\{[^}]*min-height:\s*max\(38px, var\(--ef-tap-min\)\)/s.test(css));
   assert.ok(css.includes(":focus-visible"));
   assert.ok(css.includes("prefers-reduced-motion: reduce"));
+  const app = await readFile(join(root, "src", "sidepanel", "App.tsx"), "utf8");
+  assert.ok(app.includes('className="ef-senior-quick-actions" role="group" aria-label="常用帮助"'));
 });

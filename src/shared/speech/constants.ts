@@ -1,5 +1,6 @@
 export const SPEECH_LANG = "zh-CN" as const;
 export const SPEECH_RATE = 1.0;
+export const SPEECH_SLOW_RATE = 0.75;
 export const SPEECH_PITCH = 1.0;
 
 export const SPEECH_NO_RESULT_TIMEOUT_MS = 8000;

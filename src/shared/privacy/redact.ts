@@ -1,4 +1,5 @@
 import { MAX_OUTBOUND_CHARS, MAX_OUTBOUND_CONTROLS, MAX_OUTBOUND_SEGMENTS } from "../constants";
+import { MODEL_API_BASE_URL, MODEL_HEALTH_TIMEOUT_MS, MODEL_MAX_QUOTE_CHARS, MODEL_REQUEST_TIMEOUT_MS } from "../model/config";
 import type { PageControl, SemanticSegment, Slots } from "../types";
 import { detectSensitive } from "./detect";
 import type { SensitiveHit, SensitiveKind } from "./detect";
@@ -14,19 +15,17 @@ const PLACEHOLDER: Record<SensitiveKind, string> = {
 };
 
 export const PROXY_CONTRACT = {
-  endpoint: "POST http://127.0.0.1:8765/v1/dialogue",
-  localOnly: true,
-  timeoutMs: 8000,
-  requestsPerMinute: 20,
-  maxOutputTokens: 1200,
-  envKeys: [
-    "EASYFLOW_MODEL_SECRET",
-    "EASYFLOW_MODEL_NAME",
-    "EASYFLOW_MODEL_TIMEOUT_MS",
-    "EASYFLOW_MODEL_MAX_OUTPUT_TOKENS",
-    "EASYFLOW_EXTENSION_ID",
-  ],
-  audit: "仅记录请求 ID、耗时、字节数、拒绝原因，不记录正文",
+  endpoint: `POST ${MODEL_API_BASE_URL}/v1/dialogue`,
+  healthEndpoint: `GET ${MODEL_API_BASE_URL}/health`,
+  localOnly: false,
+  transport: "https",
+  timeoutMs: MODEL_REQUEST_TIMEOUT_MS,
+  healthTimeoutMs: MODEL_HEALTH_TIMEOUT_MS,
+  maxQuoteChars: MODEL_MAX_QUOTE_CHARS,
+  healthReadyFields: ["ok", "modelConfigured"],
+  resultKinds: ["answer", "clarify", "cannot-answer"],
+  response: "result.answer 与 result.evidence；每条依据含 segmentId 和 quote",
+  privacy: "仅发送 sanitizeOutbound 生成的脱敏摘要；模型凭据由服务器管理",
 } as const;
 
 export function redactUrl(href: string): string {

@@ -70,6 +70,16 @@ interface OverlaySession {
   target: Element;
   roundId: number;
   care: boolean;
+  sticky: boolean;
+  targetText: string;
+  observer: MutationObserver | null;
+  resizeObserver: ResizeObserver | null;
+  navigation: EventTarget | null;
+  history: History | null;
+  originalPushState: History["pushState"] | null;
+  originalReplaceState: History["replaceState"] | null;
+  patchedPushState: History["pushState"] | null;
+  patchedReplaceState: History["replaceState"] | null;
   animations: Animation[];
 }
 
@@ -470,7 +480,15 @@ function updateOverlayPositions(): void {
     return;
   }
   if (!session.target.isConnected) {
-    finish("unroute");
+    finish("target-invalid");
+    return;
+  }
+  if (
+    session.sticky &&
+    (!isElementVisible(session.target) ||
+      normalizeWhitespace(visibleTextOf(session.target)) !== session.targetText)
+  ) {
+    finish("target-invalid");
     return;
   }
   let boxes: PageBox[] = [];
@@ -496,7 +514,7 @@ function updateOverlayPositions(): void {
 }
 
 function scheduleOverlayUpdate(): void {
-  if (frameRequest !== null) {
+  if (session === null || frameRequest !== null) {
     return;
   }
   frameRequest = window.requestAnimationFrame(() => {
@@ -507,6 +525,55 @@ function scheduleOverlayUpdate(): void {
 
 function onPageHide(): void {
   finish("pagehide");
+}
+
+function onNavigation(): void {
+  finish("navigation");
+}
+
+function observeStickySession(target: OverlaySession): void {
+  // One observer is active only while the user keeps a highlight. Shadow-tree
+  // box styling is outside this observation, so positioning cannot feed back.
+  target.observer = new MutationObserver(() => {
+    if (session === target) scheduleOverlayUpdate();
+  });
+  target.observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ["class", "style", "hidden", "open", "aria-hidden", "aria-label", "aria-labelledby"],
+  });
+  if (typeof ResizeObserver === "function") {
+    target.resizeObserver = new ResizeObserver(() => {
+      if (session === target) scheduleOverlayUpdate();
+    });
+    target.resizeObserver.observe(target.target);
+  }
+  window.addEventListener("popstate", onNavigation);
+  window.addEventListener("hashchange", onNavigation);
+  // The Navigation API covers same-document history changes without retaining
+  // the page URL in the highlight session.
+  const navigation = (window as Window & { navigation?: EventTarget }).navigation;
+  if (navigation !== undefined && typeof navigation.addEventListener === "function") {
+    target.navigation = navigation;
+    navigation.addEventListener("navigate", onNavigation);
+    navigation.addEventListener("currententrychange", onNavigation);
+  }
+  const history = window.history;
+  target.history = history;
+  target.originalPushState = history.pushState;
+  target.originalReplaceState = history.replaceState;
+  target.patchedPushState = function (this: History, ...args: Parameters<History["pushState"]>): void {
+    target.originalPushState?.apply(this, args);
+    if (session === target) onNavigation();
+  };
+  target.patchedReplaceState = function (this: History, ...args: Parameters<History["replaceState"]>): void {
+    target.originalReplaceState?.apply(this, args);
+    if (session === target) onNavigation();
+  };
+  history.pushState = target.patchedPushState;
+  history.replaceState = target.patchedReplaceState;
 }
 
 function createSessionHost(roundId: number, care: boolean): { host: HTMLDivElement; shadow: ShadowRoot } {
@@ -526,6 +593,20 @@ function createSessionHost(roundId: number, care: boolean): { host: HTMLDivEleme
 }
 
 function clearSessionResources(target: OverlaySession): void {
+  target.observer?.disconnect();
+  target.resizeObserver?.disconnect();
+  target.navigation?.removeEventListener("navigate", onNavigation);
+  target.navigation?.removeEventListener("currententrychange", onNavigation);
+  if (target.history !== null && target.patchedPushState !== null &&
+    target.history.pushState === target.patchedPushState && target.originalPushState !== null) {
+    target.history.pushState = target.originalPushState;
+  }
+  if (target.history !== null && target.patchedReplaceState !== null &&
+    target.history.replaceState === target.patchedReplaceState && target.originalReplaceState !== null) {
+    target.history.replaceState = target.originalReplaceState;
+  }
+  window.removeEventListener("popstate", onNavigation);
+  window.removeEventListener("hashchange", onNavigation);
   for (const animation of target.animations) {
     animation.cancel();
   }
@@ -536,10 +617,10 @@ function clearSessionResources(target: OverlaySession): void {
   }
 }
 
-function finish(reason: CleanupReason): void {
+function finish(reason: CleanupReason): boolean {
   if (session === null) {
     dispatch({ type: "cleanup", now: now(), reason: "noop" });
-    return;
+    return false;
   }
   const target = session;
   clearSessionResources(target);
@@ -558,10 +639,11 @@ function finish(reason: CleanupReason): void {
   session = null;
   dispatch({ type: "cleanup", now: now(), reason });
   syncHosts();
+  return true;
 }
 
-export function cleanupHighlight(reason: CleanupReason = "noop"): void {
-  finish(reason);
+export function cleanupHighlight(reason: CleanupReason = "noop"): boolean {
+  return finish(reason);
 }
 
 export function noteDomTick(): void {
@@ -591,6 +673,7 @@ function measure(element: Element): { range: Range | null; boxes: PageBox[] } | 
 export function highlightRef(
   ref: ElementRef,
   mode: "normal" | "care" = "normal",
+  sticky = false,
 ): HighlightResult {
   refCalls += 1;
   if (session !== null) {
@@ -624,6 +707,16 @@ export function highlightRef(
     target: element,
     roundId,
     care,
+    sticky,
+    targetText: normalizeWhitespace(visibleTextOf(element)),
+    observer: null,
+    resizeObserver: null,
+    navigation: null,
+    history: null,
+    originalPushState: null,
+    originalReplaceState: null,
+    patchedPushState: null,
+    patchedReplaceState: null,
     animations: [],
   };
 
@@ -632,6 +725,7 @@ export function highlightRef(
     pulseCount: HIGHLIGHT_PULSE_COUNT,
     ttlMs: HIGHLIGHT_TTL_MS,
     care,
+    sticky,
     reducedMotion,
     supportsAnimate: typeof host.animate === "function" || typeof HTMLDivElement.prototype.animate === "function",
   };
@@ -650,12 +744,17 @@ export function highlightRef(
   window.addEventListener("scroll", scheduleOverlayUpdate, { passive: true, capture: true });
   window.addEventListener("resize", scheduleOverlayUpdate);
   window.addEventListener("pagehide", onPageHide);
-  ttlTimer = window.setTimeout(() => {
-    finish("ttl");
-  }, HIGHLIGHT_TTL_MS);
+  if (sticky) {
+    observeStickySession(session);
+  } else {
+    ttlTimer = window.setTimeout(() => {
+      if (session?.roundId === roundId) finish("ttl");
+    }, HIGHLIGHT_TTL_MS);
+  }
 
   return {
     status: "highlighted",
+    sticky,
     rect: rectOf(element),
     stats: snapshotStats(lastUiMode),
   };

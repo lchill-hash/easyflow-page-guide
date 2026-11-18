@@ -1,4 +1,5 @@
 import type { CitationAnchor } from "../../../shared/types";
+import { Icon } from "./Icon";
 
 interface CitationListProps {
   citations: CitationAnchor[];
@@ -10,7 +11,7 @@ export function CitationList({ citations, onLocate }: CitationListProps) {
     <>
       {citations.map((citation) => (
         <div className="ef-citation" key={citation.citationId}>
-          <p className="ef-citation-text">{citation.text}</p>
+          <blockquote className="ef-citation-text">{citation.text}</blockquote>
           {citation.status === "stale" ? (
             <span className="ef-citation-stale">已失效</span>
           ) : (
@@ -21,6 +22,7 @@ export function CitationList({ citations, onLocate }: CitationListProps) {
                 onLocate(citation);
               }}
             >
+              <Icon name="target" />
               在网页中查看
             </button>
           )}
@@ -41,7 +43,7 @@ export function EvidencePanel({ citations, onLocate }: EvidencePanelProps) {
   }
   return (
     <details className="ef-evidence">
-      <summary>网页依据（{citations.length} 处）</summary>
+      <summary><span className="ef-evidence-title"><Icon name="book" />网页依据 <span className="ef-evidence-count">{citations.every((citation) => citation.status === "stale") ? "已失效" : `· ${citations.length} 处`}</span></span><Icon name="chevron" /></summary>
       <div className="ef-evidence-list">
         <CitationList citations={citations} onLocate={onLocate} />
       </div>

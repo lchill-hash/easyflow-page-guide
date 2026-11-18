@@ -11,6 +11,7 @@ export interface RoundConfig {
   care: boolean;
   reducedMotion: boolean;
   supportsAnimate: boolean;
+  sticky?: boolean;
 }
 
 export interface RoundCounters {
@@ -121,7 +122,7 @@ export function reduceRound(
       roundId += 1;
       phase = pulsing ? "pulsing" : "static";
       counters.roundStartCount += 1;
-      counters.cleanupScheduledCount += 1;
+      if (!event.config.sticky) counters.cleanupScheduledCount += 1;
       counters.overlayCreateCount += 1;
       counters.overlayLiveCount = 1;
       counters.overlayLiveMax = Math.max(counters.overlayLiveMax, 1);
@@ -129,7 +130,7 @@ export function reduceRound(
         counters.pulseStartCount += 1;
       }
       timing.lastRoundStartAt = event.now;
-      timing.ttlAt = event.now + event.config.ttlMs;
+      timing.ttlAt = event.config.sticky ? null : event.now + event.config.ttlMs;
       timing.pulseEndsAt = pulsing ? event.now + pulseTotalMs(event.config) : null;
       break;
     }

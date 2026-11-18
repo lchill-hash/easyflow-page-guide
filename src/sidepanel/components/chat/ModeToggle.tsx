@@ -11,18 +11,14 @@ export function ModeToggle({ uiMode, modeReady, onToggle }: ModeToggleProps) {
   return (
     <button
       type="button"
-      className="ef-mode-toggle"
-      role="switch"
-      aria-checked={care}
-      aria-label="阅读模式：长者关怀"
+      className="ef-mode-toggle ef-icon-button"
+      aria-pressed={care}
+      aria-label={care ? "关闭简明大字模式" : "开启简明大字模式"}
+      title={care ? "关闭简明大字模式" : "开启简明大字模式"}
       disabled={!modeReady}
       onClick={onToggle}
     >
-      <span className="ef-mode-toggle-label">长者关怀</span>
-      <span className="ef-mode-toggle-state">{care ? "已开启" : "已关闭"}</span>
-      <span className="ef-mode-toggle-track" aria-hidden="true">
-        <span className="ef-mode-toggle-thumb" />
-      </span>
+      <span aria-hidden="true">Aa</span>
     </button>
   );
 }

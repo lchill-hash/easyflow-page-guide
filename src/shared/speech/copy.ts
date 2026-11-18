@@ -177,14 +177,20 @@ export const SPEAK_LABELS = {
   step: "朗读这一步",
   answer: "朗读回答",
   stop: "停止朗读",
+  replay: "再说一遍",
+  slower: "慢一点",
+  normalSpeed: "恢复语速",
 } as const;
+
+export const VOICE_FALLBACK_TEXT =
+  "语音暂时没能完成。您可以在输入框打字，或点“打开使用帮助”看看可以怎样继续。语音是否可用取决于浏览器服务和设备。";
 
 export const SPEAK_UNAVAILABLE_TEXT = "当前浏览器不支持朗读，可以直接看文字。";
 
 export const SPEAK_NOTE_TEXT: Record<SpeakIssue, string> = {
   sensitive: "这段内容含个人信息，未朗读。",
-  "start-failed": "朗读失败，可以再试。",
-  interrupted: "朗读已中断，可以再试。",
+  "start-failed": "这次没能读出来，可以点“再说一遍”，也可以直接看文字。",
+  interrupted: "朗读已中断，可以点“再说一遍”从头听，也可以直接看文字。",
 };
 
 // 转义写法用于同时满足禁用词表与“源码不得出现该表述”的清洁断言。

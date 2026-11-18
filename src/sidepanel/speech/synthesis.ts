@@ -97,9 +97,9 @@ class BrowserSynthesisAdapter implements SynthesisAdapter {
         this.emit({ type: "ended" });
       }
     };
-    utterance.onerror = () => {
+    utterance.onerror = (event) => {
       if (!this.disposed && generation === this.generation) {
-        this.emit({ type: "error", kind: "unknown" });
+        this.emit({ type: "error", kind: event?.error === "interrupted" || event?.error === "canceled" ? "interrupted" : "unknown" });
       }
     };
     try {
@@ -124,6 +124,8 @@ class BrowserSynthesisAdapter implements SynthesisAdapter {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.stop();
     this.disposed = true;
     this.generation += 1;
     this.listener = null;

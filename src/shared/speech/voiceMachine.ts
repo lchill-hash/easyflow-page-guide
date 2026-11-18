@@ -104,6 +104,7 @@ export type VoiceInputEvent =
 export interface VoiceInputView {
   phase: VoiceInputPhase;
   statusText: string;
+  showFallbackActions: boolean;
   buttonLabel: string;
   canStart: boolean;
   canCancel: boolean;
@@ -487,6 +488,11 @@ export function describeVoiceInput(state: VoiceInputState, now = 0): VoiceInputV
   return {
     phase: state.phase,
     statusText,
+    showFallbackActions:
+      state.phase === "no-speech" ||
+      state.phase === "permission-denied" ||
+      state.phase === "unsupported" ||
+      state.phase === "failed",
     buttonLabel: VOICE_BUTTON_TEXT[state.phase],
     canStart: state.phase !== "unsupported",
     canCancel: state.phase === "listening",

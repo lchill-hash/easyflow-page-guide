@@ -18,6 +18,7 @@ import type {
   SaveGoalData,
   SidePanelRequest,
   WatchData,
+  PageChangedNotification,
 } from "../../shared/messages";
 import { detectSensitive } from "../../shared/privacy/detect";
 import { redactText } from "../../shared/privacy/redact";
@@ -64,6 +65,7 @@ import {
 import { evaluateCompletion } from "../guide/completion";
 
 import { conversationReducer, createConversationState } from "../state/conversationReducer";
+import type { ConversationAction } from "../state/conversationReducer";
 import { extractReusableObject, sanitizeReusableObject } from "../dialogue/context/topic";
 
 async function callBackground<T>(request: SidePanelRequest): Promise<EfResponse<T>> {
@@ -204,12 +206,13 @@ function replanNoticeText(result: ReconcileResult): string {
   return `${prefix}我按当前页面重新看了一遍。`;
 }
 
-function isPageChangedNotification(value: unknown): value is { type: typeof MSG.PAGE_CHANGED; tabId: number } {
+function isPageChangedNotification(value: unknown): value is PageChangedNotification {
   if (typeof value !== "object" || value === null) {
     return false;
   }
   const record = value as Record<string, unknown>;
-  return record.type === MSG.PAGE_CHANGED && typeof record.tabId === "number";
+  return record.type === MSG.PAGE_CHANGED && typeof record.tabId === "number" &&
+    typeof record.windowId === "number" && typeof record.kind === "string";
 }
 
 function isWatchTickNotification(
@@ -292,8 +295,18 @@ function buildContext(state: {
 }
 
 export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady = false) {
-  const [state, dispatch] = useReducer(conversationReducer, undefined, createConversationState);
+  const [state, reduce] = useReducer(conversationReducer, undefined, createConversationState);
   const stateRef = useRef(state);
+  // Read/recheck continuations must see the accepted page immediately, before React paints.
+  const dispatch = useCallback((action: ConversationAction): void => {
+    stateRef.current = conversationReducer(stateRef.current, action);
+    reduce(action);
+  }, []);
+  const pageEpoch = useRef(0);
+  const readEpoch = useRef(0);
+  const turnEpoch = useRef(0);
+  const panelWindowId = useRef<number | null>(null);
+  const panelWindow = useRef<Promise<number> | null>(null);
   const highlightRequestCount = useRef(0);
   const [highlightStats, setHighlightStats] = useState<HighlightStats | null>(null);
   const uiModeRef = useRef<UiMode>("normal");
@@ -310,11 +323,23 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
   useEffect(() => {
     uiModeRef.current = uiMode;
   }, [uiMode]);
-  const lastPageChange = useRef({ key: "", at: 0 });
-
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  const resolvePanelWindow = useCallback((): Promise<number> => {
+    if (panelWindow.current === null) {
+      panelWindow.current = chrome.windows.getCurrent().then((window) => {
+        if (typeof window.id !== "number") throw createEfError("EF-E001");
+        panelWindowId.current = window.id;
+        return window.id;
+      }).catch((error: unknown) => {
+        panelWindow.current = null;
+        throw error;
+      });
+    }
+    return panelWindow.current;
+  }, []);
+  const clearSlowTimer = useCallback((): void => {
+    if (slowTimer.current !== null) window.clearTimeout(slowTimer.current);
+    slowTimer.current = null;
+  }, []);
 
   const appendSystem = useCallback((text: string, noticeKind: SystemNotice["noticeKind"]): void => {
     const current = stateRef.current;
@@ -344,7 +369,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
       if (last?.role === "assistant" && last.responseType === "cannot-answer" && last.text === text) {
         return;
       }
-      const response = makeCannotResponse(text, "read-failed", "确认页面已打开后，点重试。");
+      const response = makeCannotResponse(text, "read-failed", error.action);
       const message = makeAssistantMessage(
         response,
         makeId("turn"),
@@ -393,12 +418,29 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
 
   const readPage = useCallback(
     async (reason: "initial" | "refresh" | "recheck"): Promise<PageSnapshot | null> => {
+      const pageToken = pageEpoch.current;
+      const readToken = ++readEpoch.current;
+      ++turnEpoch.current;
+      clearSlowTimer();
+      const currentRead = (): boolean => pageToken === pageEpoch.current && readToken === readEpoch.current;
       dispatch({ type: "read-start" });
+      let windowId: number;
+      try { windowId = await resolvePanelWindow(); }
+      catch (error) {
+        if (!currentRead()) return null;
+        const failure = toEfError(error);
+        dispatch({ type: "read-fail", text: failure.message, code: failure.code });
+        appendFailure(failure);
+        return null;
+      }
+      if (!currentRead()) return null;
       const context = await callBackground<GetContextData>({
         type: MSG.GET_CONTEXT,
         v: 1,
         requestId: createRequestId(),
+        windowId,
       });
+      if (!currentRead()) return null;
       if (!context.ok) {
         if (!bookingSuccessHandled.current && stateRef.current.pageSuccess !== "confirmed") {
           recordBookingCheck({
@@ -408,7 +450,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
             checkedAt: Date.now(),
           });
         }
-        dispatch({ type: "read-fail", text: context.error.message });
+        dispatch({ type: "read-fail", text: context.error.message, code: context.error.code });
         appendFailure(context.error);
         return null;
       }
@@ -419,6 +461,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
         tabId: context.data.tabId,
         reason,
       });
+      if (!currentRead()) return null;
       if (!collected.ok) {
         if (!bookingSuccessHandled.current && stateRef.current.pageSuccess !== "confirmed") {
           recordBookingCheck({
@@ -428,7 +471,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
             checkedAt: Date.now(),
           });
         }
-        dispatch({ type: "read-fail", text: collected.error.message });
+        dispatch({ type: "read-fail", text: collected.error.message, code: collected.error.code });
         appendFailure(collected.error);
         return null;
       }
@@ -464,7 +507,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
       }
       return snapshot;
     },
-    [appendFailure, finalizeBookingSuccess, recordBookingCheck],
+    [appendFailure, finalizeBookingSuccess, recordBookingCheck, resolvePanelWindow, clearSlowTimer],
   );
 
 
@@ -559,6 +602,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
 
   const handleRecheck = useCallback(
     (snapshot: PageSnapshot): void => {
+      if (stateRef.current.snapshot?.snapshotId !== snapshot.snapshotId) return;
       if (bookingSuccessHandled.current || stateRef.current.pageSuccess === "confirmed") {
         return;
       }
@@ -660,6 +704,9 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
       }
       const current = stateRef.current;
       const snapshot = snapshotOverride ?? current.snapshot;
+      if (snapshotOverride !== undefined && current.snapshot?.snapshotId !== snapshotOverride.snapshotId) return;
+      if (snapshotOverride === undefined && current.busy) return;
+      const pageToken = pageEpoch.current;
       const turnId = makeId("turn");
       const snapshotId = snapshot?.snapshotId ?? "none";
 
@@ -712,11 +759,14 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
           (current.plan !== null && isBookingPlan(current.plan)));
       if (wantsFreshRead) {
         const fresh = await readPage("recheck");
-        if (fresh === null) {
+        if (fresh === null || pageToken !== pageEpoch.current) {
           return;
         }
         activeSnapshot = fresh;
       }
+      const turnToken = ++turnEpoch.current;
+      const currentTurn = (): boolean => pageToken === pageEpoch.current && turnToken === turnEpoch.current &&
+        stateRef.current.snapshot?.snapshotId === activeSnapshot.snapshotId;
 
       const bookingEvidence = evaluateBookingSuccess(activeSnapshot);
       const successActive =
@@ -820,7 +870,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
         window.clearTimeout(slowTimer.current);
       }
       slowTimer.current = window.setTimeout(() => {
-        dispatch({ type: "slow-hint", slowHint: true });
+        if (currentTurn()) dispatch({ type: "slow-hint", slowHint: true });
       }, ENGINE_SLOW_HINT_MS);
 
       const context = buildContext({
@@ -857,8 +907,10 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
       try {
         response = await (useOnline ? modelEngine : ruleEngine).respond(request);
       } catch (error) {
+        if (!currentTurn()) return;
         console.warn("[EF]", { phase: "dialogue-engine-failed", detail: String(error) });
         response = await ruleEngine.respond(request);
+        if (!currentTurn()) return;
         if (useOnline) {
           const reason = fallbackReasonOf(error);
           response.diagnostics.priorityHit = `model-fallback:${reason}`;
@@ -868,6 +920,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
           }
         }
       }
+      if (!currentTurn()) return;
 
       if (
         successActive &&
@@ -883,6 +936,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
       let validation = validateResponse(response, activeSnapshot, activePlan);
       if (validation.status === "rejected" && response.diagnostics.mode === "online-model") {
         response = await ruleEngine.respond(request);
+        if (!currentTurn()) return;
         response.diagnostics.priorityHit = `model-validation-fallback:${validation.reason ?? "unknown"}`;
         if (!modelFallbackNotified.current) {
           modelFallbackNotified.current = true;
@@ -984,30 +1038,40 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
     })();
     return () => {
       disposed = true;
+      ++pageEpoch.current;
+      ++readEpoch.current;
+      ++turnEpoch.current;
+      clearSlowTimer();
       void stopWatch();
     };
   }, [readPage, stopWatch]);
 
   useEffect(() => {
+    let disposed = false;
     const listener = (message: unknown): void => {
       if (isPageChangedNotification(message)) {
-        if (bookingSuccessHandled.current || stateRef.current.pageSuccess === "confirmed") {
-          return;
-        }
-        const key = `${message.tabId}`;
-        const now = Date.now();
-        if (lastPageChange.current.key === key && now - lastPageChange.current.at < 1500) {
-          return;
-        }
-        lastPageChange.current = { key, at: now };
-        dispatch({ type: "page-changed" });
-        appendSystemOnce("页面变了，我先核对当前进度。", "page-changed");
-        void readPage("recheck").then((snapshot) => {
-          if (snapshot !== null) {
-            appendSystemOnce("页面已更新，我重新核对了进度。", "recheck-done");
-            handleRecheck(snapshot);
-          }
-        });
+        const accept = (): void => {
+          if (disposed || message.windowId !== panelWindowId.current) return;
+          // Invalidate synchronously, including a model reply still in flight.
+          void stopWatch();
+          ++pageEpoch.current;
+          ++readEpoch.current;
+          ++turnEpoch.current;
+          clearSlowTimer();
+          bookingSuccessHandled.current = false;
+          modelFallbackNotified.current = false;
+          dispatch({ type: "page-changed" });
+          if (message.kind === "loading") return;
+          appendSystemOnce("页面变了，我先核对当前进度。", "page-changed");
+          void readPage("recheck").then((snapshot) => {
+            if (snapshot !== null && stateRef.current.snapshot?.snapshotId === snapshot.snapshotId) {
+              appendSystemOnce("页面已更新，我重新核对了进度。", "recheck-done");
+              handleRecheck(snapshot);
+            }
+          });
+        };
+        if (panelWindowId.current === null) void resolvePanelWindow().then(accept).catch(() => undefined);
+        else accept();
         return;
       }
       if (isWatchTickNotification(message) && message.tabId === stateRef.current.tabId) {
@@ -1033,14 +1097,12 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
     };
     chrome.runtime.onMessage.addListener(listener);
     return () => {
+      disposed = true;
       chrome.runtime.onMessage.removeListener(listener);
     };
-  }, [appendSystemOnce, handleRecheck, readPage]);
+  }, [appendSystemOnce, handleRecheck, readPage, resolvePanelWindow, stopWatch, clearSlowTimer]);
 
   const retry = useCallback(async (): Promise<void> => {
-    if (bookingSuccessHandled.current || stateRef.current.pageSuccess === "confirmed") {
-      return;
-    }
     const snapshot = await readPage("refresh");
     if (snapshot !== null) {
       handleRecheck(snapshot);
@@ -1084,7 +1146,8 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
   const highlight = useCallback(async (ref: ElementRef): Promise<void> => {
     highlightRequestCount.current += 1;
     const current = stateRef.current;
-    if (current.tabId === null) {
+    const pageToken = pageEpoch.current;
+    if (current.tabId === null || current.snapshot === null || current.busy) {
       appendSystemOnce("我还没读到当前页面。点重试后再试。", "citation-stale");
       return;
     }
@@ -1096,6 +1159,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
       ref,
       mode: uiModeRef.current,
     });
+    if (pageToken !== pageEpoch.current) return;
     if (!response.ok) {
       appendSystemOnce(response.error.message, "citation-stale");
       return;
@@ -1119,6 +1183,7 @@ export function useConversation(uiMode: UiMode, modelEnabled = false, modelReady
 
   const locateCitation = useCallback(
     (citation: CitationAnchor): void => {
+      if (citation.status !== "valid") return;
       void highlight(citation.ref);
     },
     [highlight],

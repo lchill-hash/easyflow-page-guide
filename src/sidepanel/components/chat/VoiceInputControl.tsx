@@ -2,9 +2,11 @@ import {
   SPEECH_DISCLOSURE_TEXT,
   SPEECH_LOCAL_TEXTS,
   SPEECH_MODE_TEXTS,
+  VOICE_FALLBACK_TEXT,
 } from "../../../shared/speech/copy";
 import type { RecognitionMode } from "../../../shared/speech/types";
 import type { VoiceInputView } from "../../../shared/speech/voiceMachine";
+import { Icon } from "./Icon";
 
 interface VoiceInputControlProps {
   view: VoiceInputView;
@@ -13,6 +15,7 @@ interface VoiceInputControlProps {
   onRequestMic: () => void;
   onSelectMode: (mode: RecognitionMode) => void;
   onInstallLocal: () => void;
+  onPageQuestions: () => void;
 }
 
 export function VoiceInputControl({
@@ -22,6 +25,7 @@ export function VoiceInputControl({
   onRequestMic,
   onSelectMode,
   onInstallLocal,
+  onPageQuestions,
 }: VoiceInputControlProps) {
   const listening = view.phase === "listening";
   return (
@@ -33,6 +37,7 @@ export function VoiceInputControl({
         aria-describedby={view.statusText.length > 0 ? "ef-speech-status" : undefined}
         onClick={listening ? onCancel : onStart}
       >
+        <Icon name={listening ? "stop" : "mic"} />
         {view.buttonLabel}
       </button>
       {view.showMicEntry ? (
@@ -98,6 +103,14 @@ export function VoiceInputControl({
         >
           {view.statusText}
         </div>
+      ) : null}
+      {view.showFallbackActions ? (
+        <>
+          <p className="ef-speech-fallback">{VOICE_FALLBACK_TEXT}</p>
+          <button type="button" className="ef-speech-open-btn" onClick={onPageQuestions}>
+            打开使用帮助
+          </button>
+        </>
       ) : null}
       {view.showMicEntry ? (
         <p className="ef-speech-mic-purpose">{view.micEntryPurpose}</p>

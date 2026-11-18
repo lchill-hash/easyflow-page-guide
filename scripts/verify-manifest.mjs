@@ -41,11 +41,15 @@ check(
 );
 
 check(
-  !("host_permissions" in manifest) ||
-    (Array.isArray(manifest.host_permissions) && manifest.host_permissions.length === 0),
-  "host_permissions 不存在或为空",
+  Array.isArray(manifest.host_permissions) && manifest.host_permissions.length === 1 &&
+    manifest.host_permissions[0] === "https://124.221.252.80/*",
+  "host_permissions 恰为 https://124.221.252.80/*",
 );
-for (const field of ["content_scripts", "web_accessible_resources", "externally_connectable"]) {
+check(!JSON.stringify(manifest).includes("<all_urls>"), "清单禁止 <all_urls>");
+const optionalHosts = Array.isArray(manifest.optional_host_permissions) ? [...manifest.optional_host_permissions].sort() : [];
+check(optionalHosts.length === 2 && optionalHosts[0] === "http://*/*" && optionalHosts[1] === "https://*/*",
+  "optional_host_permissions 恰为用户主动授权的普通 HTTP/HTTPS 网站");
+for (const field of ["content_scripts", "web_accessible_resources", "externally_connectable", "optional_permissions"]) {
   check(!(field in manifest), `清单不含 ${field}`);
 }
 
@@ -56,6 +60,7 @@ check(manifest.background?.type === "module", "background.type 为 module");
 check(manifest.side_panel?.default_path === "sidepanel.html", "side_panel.default_path 指向 sidepanel.html");
 
 const requiredFiles = [
+  "index.html",
   "background.js",
   "content.js",
   "sidepanel.html",
@@ -83,6 +88,16 @@ const csp = manifest.content_security_policy?.extension_pages ?? "";
 check(typeof csp === "string" && csp.length > 0, "存在 extension_pages CSP");
 check(!/unsafe-eval|unsafe-inline/i.test(csp), "CSP 不含 unsafe-eval/unsafe-inline");
 check(!/https?:\/\//i.test(csp), "CSP 不含远程域名");
+
+const modelConfig = await readOptional(join(root, "src", "shared", "model", "config.ts"));
+check(
+  modelConfig.includes('MODEL_API_BASE_URL = "https://124.221.252.80:8090/easyflow/page-guide-api"'),
+  "模型仅配置指定 HTTPS 服务器接口",
+);
+const sidepanelScript = await readOptional(join(dist, "sidepanel.js"));
+check(sidepanelScript.includes("https://124.221.252.80:8090/easyflow/page-guide-api"), "侧栏产物使用服务器模型接口");
+check(!/https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/)/.test(sidepanelScript), "侧栏产物不依赖本机模型代理");
+check(!/sk-[A-Za-z0-9]{20,}/.test(sidepanelScript), "侧栏产物不含模型密钥");
 
 const micHtml = await readOptional(join(dist, "mic-permission.html"));
 check(micHtml.includes('src="mic-permission.js"'), "授权页引用 mic-permission.js");

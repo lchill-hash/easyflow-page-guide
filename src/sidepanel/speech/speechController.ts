@@ -1,6 +1,6 @@
-import { SPEECH_LANG, SPEECH_RATE } from "../../shared/speech/constants";
+import { SPEECH_LANG, SPEECH_RATE, SPEECH_SLOW_RATE } from "../../shared/speech/constants";
 import { checkSpeakText } from "../../shared/speech/policy";
-import type { SpeakRequest, SynthesisAdapter, SynthesisEvent } from "../../shared/speech/types";
+import type { SpeakRequest, SpeechSpeed, SynthesisAdapter, SynthesisEvent } from "../../shared/speech/types";
 import {
   createSpeakState,
   describeSpeak,
@@ -47,6 +47,22 @@ export class SpeechController {
   };
 
   speak(request: SpeakRequest): void {
+    this.requestSpeak(request, false);
+  }
+
+  replay(): void {
+    const request = this.state.replayRequest;
+    if (request !== null) this.requestSpeak(request, true);
+  }
+
+  setSpeed(speed: SpeechSpeed): void {
+    if (this.disposed || this.state.speed === speed) return;
+    const restart = this.state.phase === "speaking";
+    this.apply({ type: "speed-changed", speed });
+    if (restart) this.replay();
+  }
+
+  private requestSpeak(request: SpeakRequest, replay: boolean): void {
     if (this.disposed) {
       return;
     }
@@ -58,10 +74,12 @@ export class SpeechController {
       check,
       supported: this.adapter !== null,
       now: this.now(),
+      replay,
     });
     if (next === previous) {
       return;
     }
+    if (previous.phase === "speaking") this.adapter?.stop();
     this.state = next;
     this.viewCache = null;
     for (const listener of this.listeners) {
@@ -70,14 +88,11 @@ export class SpeechController {
     if (next.phase !== "speaking" || this.adapter === null) {
       return;
     }
-    if (previous.phase === "speaking" && previous.key !== next.key) {
-      this.adapter.stop();
-    }
     try {
       this.adapter.speak({
         text: request.text,
         lang: SPEECH_LANG,
-        rate: SPEECH_RATE,
+        rate: next.speed === "slow" ? SPEECH_SLOW_RATE : SPEECH_RATE,
       });
     } catch {
       this.apply({ type: "adapter-error", kind: "start-failed" });
@@ -143,7 +158,7 @@ export class SpeechController {
         this.apply({ type: "adapter-ended", now: this.now() });
         return;
       case "error":
-        this.apply({ type: "adapter-error", kind: "start-failed" });
+        this.apply({ type: "adapter-error", kind: event.kind === "interrupted" ? "interrupted" : "start-failed" });
         return;
       default:
         return;

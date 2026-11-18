@@ -20,7 +20,7 @@ export function StepDetails({
     copy.completionText.length > 0 ? copy.completionText : completionTextOf(completionCondition);
   return (
     <details className="ef-step-details">
-      <summary>详细信息 / 网页依据</summary>
+      <summary>展开说明与依据</summary>
       <div className="ef-step-raw">{copy.rawLabel}</div>
       {copy.labelTruncated ? (
         <div className="ef-step-raw-truncated">原文已截断</div>

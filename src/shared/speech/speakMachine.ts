@@ -6,6 +6,7 @@ import type {
   SpeakRequest,
   SpeakTextCheck,
   SpeakTextKind,
+  SpeechSpeed,
 } from "./types";
 
 export interface SpeakState {
@@ -16,6 +17,8 @@ export interface SpeakState {
   issue: SpeakIssue | null;
   lastCompletedKey: string | null;
   lastCompletedAt: number;
+  replayRequest: SpeakRequest | null;
+  speed: SpeechSpeed;
 }
 
 export type SpeakEvent =
@@ -25,11 +28,13 @@ export type SpeakEvent =
       check: SpeakTextCheck;
       supported: boolean;
       now: number;
+      replay?: boolean;
     }
   | { type: "adapter-started" }
   | { type: "adapter-ended"; now: number }
   | { type: "adapter-error"; kind: SpeakIssue }
   | { type: "stop-requested" }
+  | { type: "speed-changed"; speed: SpeechSpeed }
   | { type: "invalidate" };
 
 export interface SpeakView {
@@ -37,6 +42,9 @@ export interface SpeakView {
   speakingKey: string | null;
   note: string | null;
   canSpeak: boolean;
+  replayKey: string | null;
+  canReplay: boolean;
+  speed: SpeechSpeed;
 }
 
 export function createSpeakState(): SpeakState {
@@ -48,6 +56,8 @@ export function createSpeakState(): SpeakState {
     issue: null,
     lastCompletedKey: null,
     lastCompletedAt: 0,
+    replayRequest: null,
+    speed: "normal",
   };
 }
 
@@ -67,6 +77,7 @@ export function speakReducer(state: SpeakState, event: SpeakEvent): SpeakState {
             kind: null,
             text: null,
             issue: "sensitive",
+            replayRequest: null,
           };
         }
         return state;
@@ -75,11 +86,11 @@ export function speakReducer(state: SpeakState, event: SpeakEvent): SpeakState {
         return { ...state, phase: "unsupported", key: null, issue: null };
       }
       const key = speakKeyOf(event.request);
-      if (state.phase === "speaking" && state.key === key) {
+      if (!event.replay && state.phase === "speaking" && state.key === key) {
         return state;
       }
       if (
-        state.lastCompletedKey === key &&
+        !event.replay && state.lastCompletedKey === key &&
         event.now - state.lastCompletedAt < SPEECH_REPEAT_WINDOW_MS
       ) {
         return state;
@@ -91,6 +102,7 @@ export function speakReducer(state: SpeakState, event: SpeakEvent): SpeakState {
         kind: event.request.kind,
         text: event.request.text,
         issue: null,
+        replayRequest: { ...event.request },
       };
     }
     case "adapter-started":
@@ -118,11 +130,15 @@ export function speakReducer(state: SpeakState, event: SpeakEvent): SpeakState {
         return state;
       }
       return { ...state, phase: "idle", key: null, kind: null, text: null, issue: null };
+    case "speed-changed":
+      return state.speed === event.speed ? state : { ...state, speed: event.speed };
     case "invalidate":
       if (
         state.phase === "idle" &&
         state.key === null &&
-        state.issue === null
+        state.issue === null &&
+        state.replayRequest === null &&
+        state.lastCompletedKey === null
       ) {
         return state;
       }
@@ -133,6 +149,9 @@ export function speakReducer(state: SpeakState, event: SpeakEvent): SpeakState {
         kind: null,
         text: null,
         issue: null,
+        replayRequest: null,
+        lastCompletedKey: null,
+        lastCompletedAt: 0,
       };
     default:
       return state;
@@ -153,5 +172,8 @@ export function describeSpeak(state: SpeakState): SpeakView {
     speakingKey: state.phase === "speaking" ? state.key : null,
     note,
     canSpeak: state.phase !== "unsupported",
+    replayKey: state.replayRequest === null ? null : speakKeyOf(state.replayRequest),
+    canReplay: state.replayRequest !== null && state.phase !== "unsupported",
+    speed: state.speed,
   };
 }

@@ -147,6 +147,9 @@ export type CleanupReason =
   | "ttl"
   | "replaced"
   | "collect"
+  | "manual"
+  | "navigation"
+  | "target-invalid"
   | "pagehide"
   | "unroute"
   | "noop";
@@ -183,6 +186,7 @@ export interface HighlightStats {
 
 export interface HighlightResult {
   status: LocateStatus;
+  sticky?: boolean;
   rect?: ViewportRect;
   locatedElementIds?: string[];
   missingElementIds?: string[];

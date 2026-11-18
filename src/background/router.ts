@@ -18,6 +18,8 @@ import type {
   GetContextData,
   HighlightData,
   HighlightRequest,
+  HighlightClearData,
+  HighlightClearRequest,
   LoadGoalData,
   LoadGoalRequest,
   SaveGoalData,
@@ -71,12 +73,16 @@ function isSidePanelRequest(value: unknown): value is SidePanelRequest {
   }
   switch (value.type) {
     case MSG.GET_CONTEXT:
+      return value.windowId === undefined || isPositiveInteger(value.windowId);
     case MSG.LOAD_GOAL:
       return true;
     case MSG.COLLECT:
       return isPositiveInteger(value.tabId) && (value.reason === "initial" || value.reason === "refresh" || value.reason === "recheck");
     case MSG.HIGHLIGHT:
-      return isPositiveInteger(value.tabId) && isElementRef(value.ref);
+      return isPositiveInteger(value.tabId) && isElementRef(value.ref) &&
+        (value.sticky === undefined || typeof value.sticky === "boolean");
+    case MSG.HIGHLIGHT_CLEAR:
+      return isPositiveInteger(value.tabId);
     case MSG.SAVE_GOAL:
       return typeof value.goal === "string";
     case MSG.WATCH_START:
@@ -192,8 +198,13 @@ async function handleCollect(request: CollectRequest): Promise<EfResponse<Collec
     }
     return fail(request.requestId, withInjectionDetail(request.tabId, result.error));
   } finally {
-    collectLocks.delete(request.tabId);
+    if (collectLocks.get(request.tabId) === task) collectLocks.delete(request.tabId);
   }
+}
+
+export function resetTabRequests(tabId: number): void {
+  // A new document must not share a collection promise from the previous one.
+  collectLocks.delete(tabId);
 }
 
 async function handleHighlight(request: HighlightRequest): Promise<EfResponse<HighlightData>> {
@@ -224,6 +235,7 @@ async function handleHighlight(request: HighlightRequest): Promise<EfResponse<Hi
         ...(request.mode === "normal" || request.mode === "care"
           ? { mode: request.mode }
           : {}),
+        ...(request.sticky === undefined ? {} : { sticky: request.sticky }),
       },
       LOCATE_TIMEOUT_MS,
       "EF-E008",
@@ -247,6 +259,22 @@ async function handleHighlight(request: HighlightRequest): Promise<EfResponse<Hi
       return fail(request.requestId, withInjectionDetail(request.tabId, error));
     }
     return fail(request.requestId, withInjectionDetail(request.tabId, toEfError(error)));
+  }
+}
+
+async function handleHighlightClear(request: HighlightClearRequest): Promise<EfResponse<HighlightClearData>> {
+  // Clearing must also work on an already injected page after its access grant
+  // changes; do not inject a new script just to remove an existing overlay.
+  try {
+    const data = await sendToContent<HighlightClearData>(
+      request.tabId,
+      { type: MSG.CONTENT_HIGHLIGHT_CLEAR, v: 1, requestId: createRequestId() },
+      LOCATE_TIMEOUT_MS,
+      "EF-E008",
+    );
+    return ok(request.requestId, data);
+  } catch (error) {
+    return fail(request.requestId, isEfError(error) ? error : toEfError(error));
   }
 }
 
@@ -336,7 +364,7 @@ async function handleWatchStop(request: WatchStopRequest): Promise<EfResponse<Wa
 async function dispatch(request: SidePanelRequest): Promise<EfResponse<unknown>> {
   switch (request.type) {
     case MSG.GET_CONTEXT: {
-      const context = await getActiveTab();
+      const context = await getActiveTab(request.windowId);
       if (!context.ok) {
         return fail(request.requestId, context.error);
       }
@@ -347,6 +375,8 @@ async function dispatch(request: SidePanelRequest): Promise<EfResponse<unknown>>
       return handleCollect(request);
     case MSG.HIGHLIGHT:
       return handleHighlight(request);
+    case MSG.HIGHLIGHT_CLEAR:
+      return handleHighlightClear(request);
     case MSG.SAVE_GOAL:
       return handleSaveGoal(request);
     case MSG.LOAD_GOAL:

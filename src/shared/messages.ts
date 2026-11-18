@@ -14,6 +14,7 @@ export const MSG = {
   GET_CONTEXT: "EF_GET_CONTEXT",
   COLLECT: "EF_COLLECT",
   HIGHLIGHT: "EF_HIGHLIGHT",
+  HIGHLIGHT_CLEAR: "EF_HIGHLIGHT_CLEAR",
   SAVE_GOAL: "EF_SAVE_GOAL",
   LOAD_GOAL: "EF_LOAD_GOAL",
   PAGE_CHANGED: "EF_PAGE_CHANGED",
@@ -22,6 +23,7 @@ export const MSG = {
   WATCH_TICK: "EF_WATCH_TICK",
   CONTENT_COLLECT: "EF_CONTENT_COLLECT",
   CONTENT_HIGHLIGHT: "EF_CONTENT_HIGHLIGHT",
+  CONTENT_HIGHLIGHT_CLEAR: "EF_CONTENT_HIGHLIGHT_CLEAR",
   CONTENT_PING: "EF_CONTENT_PING",
   CONTENT_WATCH: "EF_CONTENT_WATCH",
   CONTENT_UNWATCH: "EF_CONTENT_UNWATCH",
@@ -74,6 +76,7 @@ interface BaseRequest {
 
 export interface GetContextRequest extends BaseRequest {
   type: typeof MSG.GET_CONTEXT;
+  windowId?: number;
 }
 
 export interface CollectRequest extends BaseRequest {
@@ -88,6 +91,12 @@ export interface HighlightRequest extends BaseRequest {
   ref: ElementRef;
   refs?: ElementRef[];
   mode?: "normal" | "care";
+  sticky?: boolean;
+}
+
+export interface HighlightClearRequest extends BaseRequest {
+  type: typeof MSG.HIGHLIGHT_CLEAR;
+  tabId: number;
 }
 
 export interface SaveGoalRequest extends BaseRequest {
@@ -113,6 +122,7 @@ export type SidePanelRequest =
   | GetContextRequest
   | CollectRequest
   | HighlightRequest
+  | HighlightClearRequest
   | SaveGoalRequest
   | LoadGoalRequest
   | WatchStartRequest
@@ -131,6 +141,11 @@ export interface ContentHighlightRequest extends BaseRequest {
   ref: ElementRef;
   refs?: ElementRef[];
   mode?: "normal" | "care";
+  sticky?: boolean;
+}
+
+export interface ContentHighlightClearRequest extends BaseRequest {
+  type: typeof MSG.CONTENT_HIGHLIGHT_CLEAR;
 }
 
 export interface ContentPingRequest extends BaseRequest {
@@ -148,6 +163,7 @@ export interface ContentUnwatchRequest extends BaseRequest {
 export type ContentRequest =
   | ContentCollectRequest
   | ContentHighlightRequest
+  | ContentHighlightClearRequest
   | ContentPingRequest
   | ContentWatchRequest
   | ContentUnwatchRequest;
@@ -156,7 +172,8 @@ export interface PageChangedNotification {
   type: typeof MSG.PAGE_CHANGED;
   v: 1;
   tabId: number;
-  kind: "activated" | "navigated" | "reloaded";
+  windowId: number;
+  kind: "activated" | "navigated" | "reloaded" | "loading" | "authorized";
 }
 
 export interface WatchTickNotification {
@@ -199,6 +216,10 @@ export interface WatchData {
 }
 
 export type HighlightData = HighlightResult;
+
+export interface HighlightClearData {
+  cleared: boolean;
+}
 
 export interface EfOk<T> {
   ok: true;

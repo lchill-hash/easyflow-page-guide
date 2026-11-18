@@ -4,11 +4,25 @@ import type { EfError, EfResult } from "../shared/errors";
 import { MSG, createRequestId } from "../shared/messages";
 import type { EfOk, PingData } from "../shared/messages";
 
-const injectedTabs = new Set<number>();
 const injectionLocks = new Map<number, Promise<EfResult<{ contentVersion: string }>>>();
 const lastInjectionErrors = new Map<number, EfError>();
 const injectionCounts = new Map<number, number>();
 const seenVersions = new Map<number, string>();
+const documentEpochs = new Map<number, number>();
+let nextEpoch = 0;
+
+function epochFor(tabId: number): number {
+  let epoch = documentEpochs.get(tabId);
+  if (epoch === undefined) {
+    epoch = ++nextEpoch;
+    documentEpochs.set(tabId, epoch);
+  }
+  return epoch;
+}
+
+function staleDocument(): EfResult<{ contentVersion: string }> {
+  return { ok: false, error: createEfError("EF-E007", "页面文档已切换，等待当前页面重新读取") };
+}
 
 function isPingResponse(value: unknown): value is EfOk<PingData> {
   if (typeof value !== "object" || value === null) {
@@ -22,7 +36,7 @@ function isPingResponse(value: unknown): value is EfOk<PingData> {
   return data.ready === true && typeof data.contentVersion === "string";
 }
 
-function ping(tabId: number): Promise<string | null> {
+function ping(tabId: number, epoch: number): Promise<string | null> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       resolve(null);
@@ -37,6 +51,10 @@ function ping(tabId: number): Promise<string | null> {
           return;
         }
         if (!isPingResponse(response)) {
+          resolve(null);
+          return;
+        }
+        if (documentEpochs.get(tabId) !== epoch) {
           resolve(null);
           return;
         }
@@ -64,13 +82,31 @@ function recordInjectionError(tabId: number, error: EfError): EfResult<{ content
   return { ok: false, error };
 }
 
-async function doEnsureInjected(tabId: number): Promise<EfResult<{ contentVersion: string }>> {
-  const existingVersion = await ping(tabId);
-  if (injectedTabs.has(tabId) && existingVersion === CONTENT_VERSION) {
+async function doEnsureInjected(tabId: number, epoch: number): Promise<EfResult<{ contentVersion: string }>> {
+  const isCurrent = (): boolean => documentEpochs.get(tabId) === epoch;
+  let mayReuseContent = false;
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!isCurrent()) return staleDocument();
+    // A loading document can still answer PING from its old content script.
+    // Wait for the complete event before accepting or injecting a script.
+    if (tab.status === "loading") return staleDocument();
+    if (tab.url !== undefined && !/^https?:\/\//i.test(tab.url)) {
+      return recordInjectionError(tabId, createEfError("EF-E002", "浏览器内部页面不允许扩展读取"));
+    }
+    // Without tabs permission, Chrome hides this field after host access is lost.
+    // A surviving content script is not evidence of a current permission grant.
+    mayReuseContent = typeof tab.url === "string" && /^https?:\/\//i.test(tab.url);
+  } catch (error) {
+    return isCurrent() ? recordInjectionError(tabId, toEfError(error)) : staleDocument();
+  }
+  const existingVersion = await ping(tabId, epoch);
+  if (!isCurrent()) return staleDocument();
+  // Service worker memory may have been reset while the content script survived.
+  if (mayReuseContent && existingVersion === CONTENT_VERSION) {
     lastInjectionErrors.delete(tabId);
     return { ok: true, data: { contentVersion: CONTENT_VERSION } };
   }
-  injectedTabs.delete(tabId);
 
   injectionCounts.set(tabId, (injectionCounts.get(tabId) ?? 0) + 1);
   try {
@@ -79,16 +115,19 @@ async function doEnsureInjected(tabId: number): Promise<EfResult<{ contentVersio
       files: ["content.js"],
     });
   } catch (error) {
-    return recordInjectionError(tabId, toEfError(error));
+    return isCurrent() ? recordInjectionError(tabId, toEfError(error)) : staleDocument();
   }
+  if (!isCurrent()) return staleDocument();
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    if ((await ping(tabId)) === CONTENT_VERSION) {
-      injectedTabs.add(tabId);
+    const version = await ping(tabId, epoch);
+    if (!isCurrent()) return staleDocument();
+    if (version === CONTENT_VERSION) {
       lastInjectionErrors.delete(tabId);
       return { ok: true, data: { contentVersion: CONTENT_VERSION } };
     }
     await delay(150);
+    if (!isCurrent()) return staleDocument();
   }
 
   return recordInjectionError(
@@ -102,7 +141,7 @@ export function ensureInjected(tabId: number): Promise<EfResult<{ contentVersion
   if (existing !== undefined) {
     return existing;
   }
-  const task = doEnsureInjected(tabId);
+  const task = doEnsureInjected(tabId, epochFor(tabId));
   injectionLocks.set(tabId, task);
   void task.then(
     () => {
@@ -119,8 +158,8 @@ export function ensureInjected(tabId: number): Promise<EfResult<{ contentVersion
   return task;
 }
 
-export function primeInjection(tabId: number): void {
-  void ensureInjected(tabId).then((result) => {
+export function primeInjection(tabId: number): Promise<void> {
+  return ensureInjected(tabId).then((result) => {
     if (!result.ok) {
       console.warn("[EF]", {
         phase: "click-preflight",
@@ -149,8 +188,15 @@ export function getInjectionDiagnostics(tabId: number): {
 }
 
 export function resetInjected(tabId: number): void {
-  injectedTabs.delete(tabId);
+  documentEpochs.set(tabId, ++nextEpoch);
+  injectionLocks.delete(tabId);
   lastInjectionErrors.delete(tabId);
   injectionCounts.delete(tabId);
   seenVersions.delete(tabId);
+}
+
+export function forgetTab(tabId: number): void {
+  resetInjected(tabId);
+  // Pending tasks compare against their old epoch and cannot repopulate maps.
+  documentEpochs.delete(tabId);
 }

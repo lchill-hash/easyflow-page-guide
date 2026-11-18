@@ -36,6 +36,7 @@ function isContentRequest(value: unknown): value is ContentRequest {
       return true;
     case MSG.CONTENT_WATCH:
     case MSG.CONTENT_UNWATCH:
+    case MSG.CONTENT_HIGHLIGHT_CLEAR:
       return true;
     case MSG.CONTENT_COLLECT:
       return (
@@ -50,7 +51,8 @@ function isContentRequest(value: unknown): value is ContentRequest {
         isRecord(ref) &&
         typeof ref.elementId === "string" &&
         typeof ref.domPath === "string" &&
-        typeof ref.textHash === "string"
+        typeof ref.textHash === "string" &&
+        (value.sticky === undefined || typeof value.sticky === "boolean")
       );
     }
     default:
@@ -77,9 +79,11 @@ function handle(request: ContentRequest): EfResponse<unknown> {
       return ok(request.requestId, result);
     }
     case MSG.CONTENT_HIGHLIGHT: {
-      const result = highlightRef(request.ref, request.mode);
+      const result = highlightRef(request.ref, request.mode, request.sticky);
       return ok(request.requestId, result);
     }
+    case MSG.CONTENT_HIGHLIGHT_CLEAR:
+      return ok(request.requestId, { cleared: cleanupHighlight("manual") });
     default:
       return fail("unknown", createEfError("EF-E005", "未知的消息类型"));
   }

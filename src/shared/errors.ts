@@ -130,10 +130,10 @@ export function toEfError(error: unknown): EfError {
     return error;
   }
   const rawMessage = error instanceof Error ? error.message : String(error ?? "");
-  if (/chrome:\/\/|chrome-extension:\/\/|extensions gallery|view-source:|about:/i.test(rawMessage)) {
+  if (/chrome:\/\/|edge:\/\/|chrome-extension:\/\/|extensions gallery|webstore|view-source:|about:|cannot be scripted/i.test(rawMessage)) {
     return createEfError("EF-E002", rawMessage);
   }
-  if (/activeTab|manifest must request permission|missing host permission|not granted|not allowed to access|denied/i.test(rawMessage)) {
+  if (/activeTab|manifest must request permission|missing host permission|not granted|not allowed to access|denied|Cannot access contents of (?:the )?(?:page|url)/i.test(rawMessage)) {
     return createEfError("EF-E003", rawMessage);
   }
   if (/Cannot access|cannot be scripted/i.test(rawMessage)) {

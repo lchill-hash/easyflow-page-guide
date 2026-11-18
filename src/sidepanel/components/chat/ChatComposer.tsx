@@ -1,18 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MAX_TURN_CHARS } from "../../../shared/constants";
 import type { UiMode } from "../../../shared/uiMode";
 import type { VoiceInputHandle } from "../../hooks/useVoiceInput";
 import { VoiceInputControl } from "./VoiceInputControl";
+import { Icon } from "./Icon";
 
 interface ChatComposerProps {
   onSend: (text: string) => void;
   disabled: boolean;
   voice: VoiceInputHandle;
   uiMode: UiMode;
+  onHelp: () => void;
 }
 
-export function ChatComposer({ onSend, disabled, voice, uiMode }: ChatComposerProps) {
+export function ChatComposer({ onSend, disabled, voice, uiMode, onHelp }: ChatComposerProps) {
   const [text, setText] = useState("");
+  const composing = useRef(false);
 
   const submit = (): void => {
     const trimmed = text.trim();
@@ -35,13 +38,15 @@ export function ChatComposer({ onSend, disabled, voice, uiMode }: ChatComposerPr
   }, [voice.view.revision, voice.view.pendingText]);
 
   return (
-    <div className="ef-composer">
+    <footer className="ef-composer">
+      <div className="ef-context-actions"><button type="button" onClick={onHelp}><Icon name="help" />使用帮助</button><span>围绕当前页面提问</span></div>
+      <div className="ef-composer-box">
       <textarea
         className="ef-composer-input"
         value={text}
         rows={2}
         maxLength={MAX_TURN_CHARS}
-        placeholder="你想了解什么，或想完成什么事？直接告诉我。"
+        placeholder="问问这一页，或说说你想办什么…"
         aria-label="输入你想了解或想完成的事"
         aria-describedby="ef-composer-hint"
         onChange={(event) => {
@@ -50,11 +55,13 @@ export function ChatComposer({ onSend, disabled, voice, uiMode }: ChatComposerPr
           voice.onComposerTextChange(next);
         }}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.nativeEvent.keyCode !== 229) {
             event.preventDefault();
             submit();
           }
         }}
+        onCompositionStart={() => { composing.current = true; }}
+        onCompositionEnd={() => { composing.current = false; }}
       />
       <div className="ef-composer-row">
         <span className="ef-composer-hint" id="ef-composer-hint">
@@ -63,10 +70,12 @@ export function ChatComposer({ onSend, disabled, voice, uiMode }: ChatComposerPr
         <button
           type="button"
           className="ef-send-btn"
+          aria-label={disabled ? "正在等待回复" : "发送问题"}
+          title={disabled ? "正在等待回复" : "发送问题"}
           disabled={disabled || text.trim().length === 0}
           onClick={submit}
         >
-          {disabled ? "等待中…" : "发送"}
+          <Icon name="up" />
         </button>
       </div>
       <VoiceInputControl
@@ -76,7 +85,10 @@ export function ChatComposer({ onSend, disabled, voice, uiMode }: ChatComposerPr
         onRequestMic={voice.requestMicPermission}
         onSelectMode={voice.setMode}
         onInstallLocal={voice.installLocal}
+        onPageQuestions={onHelp}
       />
-    </div>
+      </div>
+      <p className="ef-composer-note"><Icon name="lock" />只读指引 · 不代填、不代提交</p>
+    </footer>
   );
 }

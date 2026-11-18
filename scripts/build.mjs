@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 import { generateIcons } from "./gen-icons.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
+const buildRoot = process.cwd();
 const dist = join(root, "dist");
+const sourcePath = (relativePath) => join(root, relativePath).replaceAll("\\", "/");
 
 async function resetDist() {
   await rm(dist, { recursive: true, force: true });
@@ -15,8 +17,8 @@ async function resetDist() {
 
 async function buildBackground() {
   await build({
-    absWorkingDir: root,
-    entryPoints: ["src/background/index.ts"],
+    absWorkingDir: buildRoot,
+    entryPoints: [sourcePath("src/background/index.ts")],
     outfile: join(dist, "background.js"),
     bundle: true,
     format: "esm",
@@ -31,8 +33,8 @@ async function buildBackground() {
 
 async function buildContent() {
   await build({
-    absWorkingDir: root,
-    entryPoints: ["src/content/entry.ts"],
+    absWorkingDir: buildRoot,
+    entryPoints: [sourcePath("src/content/entry.ts")],
     outfile: join(dist, "content.js"),
     bundle: true,
     format: "iife",
@@ -46,8 +48,8 @@ async function buildContent() {
 
 async function buildSidePanel() {
   await build({
-    absWorkingDir: root,
-    entryPoints: ["src/sidepanel/main.tsx"],
+    absWorkingDir: buildRoot,
+    entryPoints: [sourcePath("src/sidepanel/main.tsx")],
     outfile: join(dist, "sidepanel.js"),
     bundle: true,
     format: "esm",
@@ -63,8 +65,8 @@ async function buildSidePanel() {
 
 async function buildMicPermission() {
   await build({
-    absWorkingDir: root,
-    entryPoints: ["src/mic-permission/main.tsx"],
+    absWorkingDir: buildRoot,
+    entryPoints: [sourcePath("src/mic-permission/main.tsx")],
     outfile: join(dist, "mic-permission.js"),
     bundle: true,
     format: "esm",
@@ -79,6 +81,7 @@ async function buildMicPermission() {
 }
 
 async function copyStatic() {
+  await copyFile(join(root, "public", "index.html"), join(dist, "index.html"));
   await copyFile(join(root, "public", "manifest.json"), join(dist, "manifest.json"));
   await copyFile(join(root, "public", "sidepanel.html"), join(dist, "sidepanel.html"));
   await copyFile(

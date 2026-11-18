@@ -1,6 +1,9 @@
 import { SPEAK_LABELS, SPEAK_UNAVAILABLE_TEXT } from "../../../shared/speech/copy";
+import { speakKeyOf } from "../../../shared/speech/speakMachine";
 import type { SpeakTextKind } from "../../../shared/speech/types";
 import type { SpeechUi } from "../../hooks/useSpeechSynthesis";
+import { Icon } from "./Icon";
+import "../../styles/senior-speech.css";
 
 interface SpeechButtonProps {
   speech: SpeechUi;
@@ -9,7 +12,7 @@ interface SpeechButtonProps {
   text: string;
 }
 
-function SpeechButton({ speech, targetKey, kind, text }: SpeechButtonProps) {
+function SpeechButton({ speech, kind, text }: SpeechButtonProps) {
   if (!speech.supported) {
     return (
       <span className="ef-speak-unavailable" role="status">
@@ -17,7 +20,7 @@ function SpeechButton({ speech, targetKey, kind, text }: SpeechButtonProps) {
       </span>
     );
   }
-  const speaking = speech.isSpeaking(targetKey);
+  const speaking = speech.isSpeaking(speakKeyOf({ kind, text }));
   const label = speaking
     ? SPEAK_LABELS.stop
     : kind === "step-action"
@@ -36,7 +39,22 @@ function SpeechButton({ speech, targetKey, kind, text }: SpeechButtonProps) {
           speech.speak({ kind, text });
         }}
       >
+        <Icon name={speaking ? "stop" : "volume"} />
         {label}
+      </button>
+      {speech.canReplay && speech.replayKey === speakKeyOf({ kind, text }) && !speaking ? (
+        <button type="button" className="ef-speech-extra-btn" onClick={speech.replay}>
+          <Icon name="volume" />
+          {SPEAK_LABELS.replay}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="ef-speech-extra-btn"
+        aria-pressed={speech.speed === "slow"}
+        onClick={() => speech.setSpeed(speech.speed === "slow" ? "normal" : "slow")}
+      >
+        {speech.speed === "slow" ? SPEAK_LABELS.normalSpeed : SPEAK_LABELS.slower}
       </button>
       {speech.note !== null ? (
         <span className="ef-speak-note" role="status">

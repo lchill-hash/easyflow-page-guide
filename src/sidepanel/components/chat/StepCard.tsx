@@ -16,6 +16,7 @@ import {
   stepCardStateTag,
 } from "./stepCardModel";
 import type { StepCardCopy } from "./stepCardCopy";
+import { Icon } from "./Icon";
 
 interface StepCardProps {
   targetControl: TargetControl;
@@ -59,7 +60,7 @@ export function StepCard({
     const hint =
       mode === "ended"
         ? "这一步已结束，以网页显示为准。"
-        : "页面已经变化，这一步已过期，请按上方最新指引操作。";
+        : "页面或步骤已经变化，这一步已过期，请使用最新指引。";
     return (
       <div className={`ef-step-card ef-step-card-${mode}`} data-step-mode={mode}>
         <div className="ef-step-label">{stepCardLabel(mode)}</div>
@@ -92,9 +93,9 @@ export function StepCard({
           {stepCardStateTag("current")}
         </span>
       </div>
-      <p id={shortId} className="ef-step-goal">
+      <h3 id={shortId} className="ef-step-goal">
         {copy.shortText}
-      </p>
+      </h3>
       {/* 当前卡内唯一详情入口：ef-step-details（由 StepDetails 渲染） */}
       <div className="ef-step-actions-line">
         <button
@@ -104,6 +105,7 @@ export function StepCard({
             onLocate(copy.targetRef);
           }}
         >
+          <Icon name="target" />
           指给我看
         </button>
         {speech !== undefined ? (

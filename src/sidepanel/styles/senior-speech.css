@@ -1,0 +1,30 @@
+.ef-speech-extra-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ef-space-1);
+  min-height: var(--ef-tap-min);
+  padding: var(--ef-space-2) var(--ef-space-3);
+  border: 1px solid var(--ef-border-strong);
+  border-radius: var(--ef-radius-sm);
+  background: var(--ef-surface);
+  color: var(--ef-text-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ef-speak-btn:focus-visible,
+.ef-speech-extra-btn:focus-visible,
+.ef-speech-open-btn:focus-visible {
+  outline: 3px solid var(--ef-primary);
+  outline-offset: 2px;
+}
+
+.ef-speech-fallback {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--ef-text-soft);
+  font-size: var(--ef-font-small);
+  line-height: var(--ef-line-body);
+  overflow-wrap: anywhere;
+}

@@ -78,7 +78,8 @@ function collectNgrams(text: string): string[] {
     if (left.length !== right.length) {
       return right.length - left.length;
     }
-    return left.localeCompare(right);
+    // Keep keyword selection identical across Chinese and English browser locales.
+    return left.localeCompare(right, "zh-CN");
   });
 }
 

@@ -13,6 +13,7 @@ import type {
   UserMessage,
   VoiceState,
 } from "../../shared/types";
+import type { EfErrorCode } from "../../shared/errors";
 
 export interface ConversationState {
   phase: SessionPhase;
@@ -35,6 +36,8 @@ export interface ConversationState {
   autoRechecks: number;
   readMs: number;
   iframeCount: number;
+  readErrorCode: EfErrorCode | null;
+  readErrorText: string;
   lastObject?: string;
   lastMaterial?: string;
 }
@@ -49,7 +52,7 @@ export type ConversationAction =
       iframeCount: number;
       diagnostics: CollectDiagnostics;
     }
-  | { type: "read-fail"; text: string }
+  | { type: "read-fail"; text: string; code?: EfErrorCode }
   | { type: "user-add"; message: UserMessage }
   | { type: "assistant-add"; message: AssistantMessage }
   | { type: "system-add"; message: SystemNotice }
@@ -111,6 +114,8 @@ export function createConversationState(): ConversationState {
     autoRechecks: 0,
     readMs: 0,
     iframeCount: 0,
+    readErrorCode: null,
+    readErrorText: "",
   };
 }
 
@@ -123,6 +128,8 @@ export function conversationReducer(state: ConversationState, action: Conversati
         pageState: state.snapshot === null ? "readable" : "rechecking",
         busy: true,
         slowHint: false,
+        readErrorCode: null,
+        readErrorText: "",
       };
     case "read-ok":
       return {
@@ -138,6 +145,8 @@ export function conversationReducer(state: ConversationState, action: Conversati
         slowHint: false,
         canRetry: false,
         autoRechecks: 0,
+        readErrorCode: null,
+        readErrorText: "",
       };
     case "read-fail":
       return {
@@ -147,6 +156,12 @@ export function conversationReducer(state: ConversationState, action: Conversati
         busy: false,
         slowHint: false,
         canRetry: true,
+        snapshot: null,
+        tabId: null,
+        collectDiagnostics: null,
+        currentCardMessageId: null,
+        readErrorCode: action.code ?? null,
+        readErrorText: action.text,
       };
     case "user-add":
       return { ...state, messages: appendMessage(state.messages, action.message) };
@@ -187,6 +202,15 @@ export function conversationReducer(state: ConversationState, action: Conversati
         ...state,
         phase: "reviewing",
         pageState: "changed",
+        snapshot: null,
+        tabId: null,
+        collectDiagnostics: null,
+        pageSuccess: "none",
+        lastBookingCheck: null,
+        busy: true,
+        slowHint: false,
+        readErrorCode: null,
+        readErrorText: "",
         plan,
         canRetry: true,
         messages: markCitationsStale(state.messages),
