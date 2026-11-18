@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "EasyFlow 页面指引",
-  "version": "0.3.0",
-  "description": "在用户主动打开的真实网页上读取可见内容，并按本地关键词定位原文依据的浏览器指引层。",
+  "version": "0.4.0",
+  "description": "EasyFlow：在用户主动打开的真实网页上读取可见内容，并提供可核对的页面指引。",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "scripting", "sidePanel", "storage"],
   "host_permissions": ["https://124.221.252.80/*"],
@@ -16,7 +16,7 @@
     "default_path": "sidepanel.html"
   },
   "action": {
-    "default_title": "打开 EasyFlow 侧边栏",
+    "default_title": "打开EasyFlow侧边栏",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

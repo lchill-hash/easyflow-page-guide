@@ -70,8 +70,8 @@ export function usePageAccess(): PageAccessState {
         setError(removing
           ? "未能关闭切页自动读取，请重试或在浏览器扩展设置中管理网站权限。"
           : failed
-            ? "未能申请网站读取权限。请重试，或点击工具栏中的 EasyFlow 图标读取这一页。"
-            : "未开启切页自动读取。你仍可点击工具栏中的 EasyFlow 图标，只读取这一页。");
+            ? "未能申请网站读取权限。请重试，或点击工具栏中的EasyFlow图标读取这一页。"
+            : "未开启切页自动读取。你仍可点击工具栏中的EasyFlow图标，只读取这一页。");
       }
       // The browser permission is the source of truth, including denial/removal.
       await refresh();

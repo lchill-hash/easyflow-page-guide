@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { MAX_TURN_CHARS } from "../../../shared/constants";
 import type { UiMode } from "../../../shared/uiMode";
 import type { VoiceInputHandle } from "../../hooks/useVoiceInput";
+import { useAutosizeTextarea } from "../../hooks/useAutosizeTextarea";
 import { VoiceInputControl } from "./VoiceInputControl";
 import { Icon } from "./Icon";
 
@@ -16,6 +17,8 @@ interface ChatComposerProps {
 export function ChatComposer({ onSend, disabled, voice, uiMode, onHelp }: ChatComposerProps) {
   const [text, setText] = useState("");
   const composing = useRef(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  useAutosizeTextarea(inputRef, text);
 
   const submit = (): void => {
     const trimmed = text.trim();
@@ -42,6 +45,7 @@ export function ChatComposer({ onSend, disabled, voice, uiMode, onHelp }: ChatCo
       <div className="ef-context-actions"><button type="button" onClick={onHelp}><Icon name="help" />使用帮助</button><span>围绕当前页面提问</span></div>
       <div className="ef-composer-box">
       <textarea
+        ref={inputRef}
         className="ef-composer-input"
         value={text}
         rows={2}
@@ -65,8 +69,17 @@ export function ChatComposer({ onSend, disabled, voice, uiMode, onHelp }: ChatCo
       />
       <div className="ef-composer-row">
         <span className="ef-composer-hint" id="ef-composer-hint">
-          {uiMode === "care" ? "Enter 发送" : "Enter 发送 · Shift+Enter 换行"}
+          {uiMode === "care" ? "Enter 发送" : "Enter 发送"}
         </span>
+        <VoiceInputControl
+          view={voice.view}
+          onStart={voice.start}
+          onCancel={voice.cancel}
+          onRequestMic={voice.requestMicPermission}
+          onSelectMode={voice.setMode}
+          onInstallLocal={voice.installLocal}
+          onPageQuestions={onHelp}
+        />
         <button
           type="button"
           className="ef-send-btn"
@@ -78,15 +91,6 @@ export function ChatComposer({ onSend, disabled, voice, uiMode, onHelp }: ChatCo
           <Icon name="up" />
         </button>
       </div>
-      <VoiceInputControl
-        view={voice.view}
-        onStart={voice.start}
-        onCancel={voice.cancel}
-        onRequestMic={voice.requestMicPermission}
-        onSelectMode={voice.setMode}
-        onInstallLocal={voice.installLocal}
-        onPageQuestions={onHelp}
-      />
       </div>
       <p className="ef-composer-note"><Icon name="lock" />只读指引 · 不代填、不代提交</p>
     </footer>

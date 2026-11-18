@@ -1,4 +1,6 @@
 import type { UiMode } from "../../../shared/uiMode";
+import { BRAND_NAME, BRAND_TAGLINE } from "../../../shared/brand";
+import { BrandMark } from "./BrandMark";
 import { ModeToggle } from "./ModeToggle";
 import { Icon } from "./Icon";
 
@@ -14,11 +16,11 @@ export function ChatHeader({ uiMode, modeReady, onToggleMode, onOpenSettings }: 
     <header className="ef-header ef-chat-header">
       <div className="ef-brand">
         <span className="ef-logo" aria-hidden="true">
-          e
+          <BrandMark />
         </span>
         <div>
-          <h1 className="ef-title">EasyFlow</h1>
-          <p className="ef-subtitle">陪你看懂，也陪你办。</p>
+          <h1 className="ef-title">{BRAND_NAME}</h1>
+          <p className="ef-subtitle">{BRAND_TAGLINE}</p>
         </div>
       </div>
       <div className="ef-header-actions">

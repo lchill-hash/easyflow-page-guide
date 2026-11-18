@@ -4,8 +4,8 @@ import { build } from "esbuild";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import * as proxyLib from "./model-proxy-lib.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -67,6 +67,9 @@ await build({
       'export { detectNameRisk, redactLabeledNames, sanitizeNameText } from "./src/shared/privacy/name.ts";',
       'export { ModelFallbackError, shouldUseOnlineModel, fallbackNotice, fallbackReasonOf } from "./src/shared/model/fallback.ts";',
       'export { PROXY_CONTRACT } from "./src/shared/privacy/redact.ts";',
+      'export { BRAND_NAME, BRAND_TAGLINE, BRAND_PAGE_TITLE, BRAND_MIC_TITLE, BRAND_INSTALL_TITLE } from "./src/shared/brand.ts";',
+      'export { INPUT_MIN_ROWS, INPUT_MAX_ROWS, INPUT_MAX_VIEWPORT_RATIO, COMPOSER_MAX_VIEWPORT_RATIO } from "./src/sidepanel/layout/constants.ts";',
+      'export { buildTaskProgress } from "./src/sidepanel/guide/taskProgress.ts";',
     ].join("\n").replaceAll('from "./', `from "${root.replaceAll("\\", "/")}/`),
     resolveDir: root,
     sourcefile: "selftest-entry.ts",
@@ -3149,7 +3152,7 @@ test("AT-50 样式 token、偏好契约与源码清洁", async () => {
     "--ef-primary-min-h: 48px",
     "--ef-tap-min: 44px",
     "prefers-reduced-motion: reduce",
-    "max-height: 36vh",
+    "max-height: var(--ef-composer-max-h)",
     "100dvh",
     ":focus-visible",
   ]) {
@@ -3934,7 +3937,7 @@ test("AT-112 侧栏 CSS 单 token 源与视觉约束", async () => {
   assert.ok(css.includes("--ef-font-current: 22px"));
   assert.ok(css.includes("--ef-primary-min-h: 48px"));
   assert.ok(css.includes("--ef-tap-min: 44px"));
-  assert.ok(css.includes("linear-gradient(145deg, #ffffff 40%, #faf7ff)"));
+  assert.ok(css.includes("linear-gradient(135deg, #fff 30%, #f5eeff 100%)"));
   assert.ok(css.includes("--ef-primary: #5b42ed"));
   assert.ok(css.includes("@media (max-width: 420px)"));
   assert.ok(css.includes("@media (max-width: 320px)"));
@@ -4163,19 +4166,224 @@ test("AT-123 紫色系 token 与既有视觉约束", async () => {
   );
   assert.equal((css.match(/:root\s*\{/g) ?? []).length, 1);
   assert.ok(css.includes("--ef-primary: #5b42ed"));
-  assert.ok(css.includes("linear-gradient(145deg, #ffffff 40%, #faf7ff)"));
+  assert.ok(css.includes("linear-gradient(135deg, #fff 30%, #f5eeff 100%)"));
   assert.ok(css.includes("--ef-bg: #faf8ff"));
   assert.ok(css.includes("--ef-text: #1f1a38"));
-  assert.ok(css.includes("--ef-muted: #756581"));
-  assert.ok(css.includes('--ef-border-strong: #d4c5e8'));
+  assert.ok(css.includes("--ef-muted: #5b5378"));
+  assert.ok(css.includes('--ef-border-strong: #8f7fd6'));
   assert.ok(css.includes("--ef-font-body: 18px"));
   assert.ok(css.includes("--ef-font-current: 22px"));
   assert.ok(css.includes("--ef-primary-min-h: 48px"));
   assert.ok(css.includes("--ef-tap-min: 44px"));
-  assert.ok(/\.ef-senior-quick-actions button,\s*\.ef-senior-progress-actions > button,\s*\.ef-senior-help > button\s*\{[^}]*min-height:\s*max\(42px, var\(--ef-tap-min\)\)/s.test(css));
+  assert.ok(/html\[data-ui-mode="care"\] \.ef-senior-quick-actions button\s*\{[^}]*min-height:\s*44px/s.test(css));
   assert.ok(/\.ef-senior-questions button\s*\{[^}]*min-height:\s*max\(38px, var\(--ef-tap-min\)\)/s.test(css));
   assert.ok(css.includes(":focus-visible"));
   assert.ok(css.includes("prefers-reduced-motion: reduce"));
   const app = await readFile(join(root, "src", "sidepanel", "App.tsx"), "utf8");
   assert.ok(app.includes('className="ef-senior-quick-actions" role="group" aria-label="常用帮助"'));
+});
+test("AT-124 对外品牌统一为 EasyFlow 且内部标识保留", async () => {
+  assert.equal(ef.BRAND_NAME, "EasyFlow");
+  assert.equal(ef.BRAND_PAGE_TITLE, "EasyFlow 页面指引");
+  assert.equal(ef.BRAND_MIC_TITLE, "EasyFlow 麦克风授权");
+  const sourceFiles = await collectSourceFiles(join(root, "src"));
+  for (const path of sourceFiles) {
+    const source = await readFile(path, "utf8");
+    assert.ok(!source.includes("\u6570\u754c\u901a"), path);
+  }
+  const constants = await readFile(join(root, "src", "shared", "constants.ts"), "utf8");
+  assert.ok(constants.includes("easyflow.goal"));
+  const header = await readFile(join(root, "src", "sidepanel", "components", "chat", "ChatHeader.tsx"), "utf8");
+  assert.ok(header.includes("BRAND_NAME"));
+  assert.ok(header.includes("BRAND_TAGLINE"));
+  const micCopy = await readFile(join(root, "src", "shared", "speech", "copy.ts"), "utf8");
+  assert.ok(micCopy.includes("EasyFlow"));
+  assert.ok(!micCopy.includes("\u6570\u754c\u901a"));
+  assert.ok(!micCopy.includes("EASYFLOW_MODEL"));
+});
+
+test("AT-125 静态品牌、标题与 0.4.0 版本", async () => {
+  const manifest = JSON.parse(await readFile(join(root, "public", "manifest.json"), "utf8"));
+  assert.equal(manifest.name, "EasyFlow 页面指引");
+  assert.equal(manifest.version, "0.4.0");
+  assert.equal(manifest.action.default_title, "打开EasyFlow侧边栏");
+  assert.equal(manifest.manifest_version, 3);
+  const sidepanel = await readFile(join(root, "public", "sidepanel.html"), "utf8");
+  assert.ok(sidepanel.includes("<title>EasyFlow 页面指引</title>"));
+  const mic = await readFile(join(root, "public", "mic-permission.html"), "utf8");
+  assert.ok(mic.includes("<title>EasyFlow 麦克风授权</title>"));
+  const install = await readFile(join(root, "public", "index.html"), "utf8");
+  assert.ok(install.includes("<title>EasyFlow 页面指引</title>"));
+  assert.ok(install.includes("版本 0.4.0"));
+  assert.ok(install.includes("EasyFlow · 0.4.0"));
+  assert.ok(!install.includes("\u6570\u754c\u901a"));
+  const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+  assert.equal(pkg.version, "0.4.0");
+  const readme = await readFile(join(root, "README.md"), "utf8");
+  assert.ok(readme.startsWith("# EasyFlow"));
+  assert.ok(!readme.includes("\u6570\u754c\u901a"));
+});
+
+test("AT-126 工具栏图标 PNG 头合法", async () => {
+  for (const size of [16, 32, 48, 128]) {
+    const buffer = await readFile(join(root, "dist", "icons", `icon${size}.png`));
+    assert.equal(buffer.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+    assert.equal(buffer.readUInt32BE(16), size);
+    assert.equal(buffer.readUInt32BE(20), size);
+    assert.equal(buffer[24], 8);
+    assert.equal(buffer[25], 6);
+    assert.ok(buffer.length > 100);
+  }
+});
+
+function decodeIconPng(buffer) {
+  const size = buffer.readUInt32BE(16);
+  let offset = 8;
+  const idat = [];
+  while (offset < buffer.length) {
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.subarray(offset + 4, offset + 8).toString("ascii");
+    const data = buffer.subarray(offset + 8, offset + 8 + length);
+    if (type === "IDAT") idat.push(data);
+    offset += 12 + length;
+    if (type === "IEND") break;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  return { size, raw };
+}
+
+function pixelAt(raw, size, x, y) {
+  const rowStart = y * (size * 4 + 1);
+  const index = rowStart + 1 + x * 4;
+  return { r: raw[index], g: raw[index + 1], b: raw[index + 2], a: raw[index + 3] };
+}
+
+test("AT-127 图标透明角与紫色主体", async () => {
+  for (const size of [16, 32, 48, 128]) {
+    const { raw } = decodeIconPng(await readFile(join(root, "dist", "icons", `icon${size}.png`)));
+    for (const [x, y] of [[0, 0], [size - 1, 0], [0, size - 1], [size - 1, size - 1]]) {
+      assert.equal(pixelAt(raw, size, x, y).a, 0, `${size} corner ${x},${y}`);
+    }
+    const centre = pixelAt(raw, size, Math.floor(size / 2), Math.round(size * 0.52));
+    assert.ok(centre.a > 0, `${size} centre alpha`);
+    assert.ok(centre.r > 220 && centre.g > 220 && centre.b > 220, `${size} white e crossbar`);
+  }
+});
+
+test("AT-128 输入区单一滚动与自适应高度", async () => {
+  const css = await readFile(join(root, "src", "sidepanel", "styles", "sidepanel.css"), "utf8");
+  const composerBlock = css.slice(css.indexOf(".ef-composer {"), css.indexOf(".ef-composer-box {"));
+  assert.ok(composerBlock.includes("max-height: var(--ef-composer-max-h)"));
+  assert.ok(!composerBlock.includes("overflow-y: auto"));
+  assert.ok(!css.includes("max-height: 36vh"));
+  assert.ok(css.includes("--ef-input-min-h"));
+  assert.ok(css.includes("--ef-input-max-h"));
+  const composer = await readFile(join(root, "src", "sidepanel", "components", "chat", "ChatComposer.tsx"), "utf8");
+  assert.ok(composer.includes("rows={2}"));
+  assert.ok(composer.includes("useAutosizeTextarea"));
+  assert.ok(composer.includes("ref={inputRef}"));
+  assert.equal(ef.INPUT_MIN_ROWS, 2);
+  assert.equal(ef.INPUT_MAX_ROWS, 6);
+  assert.equal(ef.INPUT_MAX_VIEWPORT_RATIO, 0.2);
+  assert.equal(ef.COMPOSER_MAX_VIEWPORT_RATIO, 0.32);
+});
+
+test("AT-129 麦克风说明按需展开与焦点管理", async () => {
+  const source = await readFile(join(root, "src", "sidepanel", "components", "chat", "VoiceInputControl.tsx"), "utf8");
+  assert.ok(source.includes("micGuideOpen"));
+  assert.ok(source.includes("setMicGuideOpen(true)"));
+  assert.ok(source.includes("aria-expanded={view.showMicEntry ? micGuideOpen : undefined}"));
+  assert.ok(source.includes('aria-controls={view.showMicEntry ? "ef-mic-guide" : undefined}'));
+  assert.ok(source.includes('id="ef-mic-guide"'));
+  assert.ok(source.includes('role="region"'));
+  assert.ok(source.includes("hidden={!micGuideOpen}"));
+  assert.ok(source.includes("startRef"));
+  assert.ok(source.includes("startRef.current?.focus()"));
+  assert.ok(source.includes("!view.showMicEntry"));
+});
+
+test("AT-130 视觉 token、单 root 与 450px 断点", async () => {
+  const css = await readFile(join(root, "src", "sidepanel", "styles", "sidepanel.css"), "utf8");
+  assert.equal((css.match(/:root\s*\{/g) ?? []).length, 1);
+  assert.ok(css.includes("--ef-tint-lilac"));
+  assert.ok(css.includes("--ef-tint-pink"));
+  assert.ok(css.includes("--ef-tint-warm"));
+  assert.ok(css.includes("--ef-note-ink"));
+  assert.ok(css.includes("@media (max-width: 450px)"));
+  assert.ok(css.includes("@media (max-width: 360px)"));
+  assert.ok(css.includes("@media (max-width: 320px)"));
+  assert.ok(css.includes(":focus-visible"));
+  assert.ok(css.includes("prefers-reduced-motion: reduce"));
+  assert.ok(css.includes("--ef-primary: #5b42ed"));
+});
+
+test("AT-131 长者关怀尺寸与大字不回退", async () => {
+  const css = await readFile(join(root, "src", "sidepanel", "styles", "sidepanel.css"), "utf8");
+  const care = css.slice(css.indexOf('html[data-ui-mode="care"]'), css.indexOf("/* Layer 3"));
+  assert.ok(care.includes("--ef-font-body: 18px"));
+  assert.ok(care.includes("--ef-font-current: 22px"));
+  assert.ok(care.includes("--ef-tap-min: 44px"));
+  assert.ok(care.includes("--ef-primary-min-h: 48px"));
+  assert.ok(care.includes("--ef-focus-width: 3px"));
+});
+test("AT-132 任务进度按实际步骤重算且不由指给我看完成", () => {
+  const dateStep = { targetControl: { kind: "date" } };
+  const timeStep = { targetControl: { kind: "time" } };
+  const nextStep = { targetControl: { kind: "next" } };
+  const plan = {
+    planId: "p",
+    version: 1,
+    goal: "我想预约会议",
+    status: "active",
+    currentIndex: 0,
+    steps: [{}],
+  };
+  const dateProgress = ef.buildTaskProgress(plan, dateStep, false);
+  assert.deepEqual(dateProgress.map((stage) => stage.label), ["选择日期", "选择时间", "填写信息", "确认预约"]);
+  assert.deepEqual(dateProgress.map((stage) => stage.status), ["current", "next", "next", "next"]);
+  const timeProgress = ef.buildTaskProgress(plan, timeStep, false);
+  assert.deepEqual(timeProgress.map((stage) => stage.status), ["done", "current", "next", "next"]);
+  const nextProgress = ef.buildTaskProgress(plan, nextStep, false);
+  assert.deepEqual(nextProgress.map((stage) => stage.status), ["done", "done", "current", "next"]);
+  const success = ef.buildTaskProgress(plan, nextStep, true);
+  assert.deepEqual(success.map((stage) => stage.status), ["done", "done", "done", "done"]);
+  const generic = ef.buildTaskProgress(
+    { ...plan, goal: "办理业务", steps: [{ goal: "选网点" }, { goal: "填资料" }], currentIndex: 1 },
+    { targetControl: { kind: "generic" } },
+    false,
+  );
+  assert.deepEqual(generic.map((stage) => stage.status), ["done", "current"]);
+  assert.equal(ef.buildTaskProgress(null, null, false), null);
+  const rescheduleForm = {
+    url: "https://cal.com/example/15min?rescheduleUid=test",
+    items: [{ type: "inputLabel", text: "您的姓名" }, { type: "inputLabel", text: "邮箱地址" }],
+    controls: [],
+  };
+  const formProgress = ef.buildTaskProgress(null, null, false, rescheduleForm);
+  assert.deepEqual(formProgress.map((stage) => stage.status), ["done", "done", "current", "next"]);
+  assert.equal(formProgress.at(-1).label, "确认重新安排");
+  assert.equal(ef.buildTaskProgress(null, null, false, { ...rescheduleForm, url: "https://example.com/form", title: "普通表单" }), null);
+  const unconfirmed = ef.buildTaskProgress({ ...plan, status: "completed" }, nextStep, false, rescheduleForm);
+  assert.notEqual(unconfirmed.at(-1).status, "done", "a finished local plan is not proof of submission");
+});
+
+test("AT-133 简洁导览可退出且不删除/不阻挡网页", async () => {
+  const focus = await readFile(join(root, "src", "sidepanel", "pageFocus.ts"), "utf8");
+  assert.ok(focus.includes("ef-page-focus-host"));
+  assert.ok(focus.includes("pointerEvents = \"none\""));
+  assert.ok(focus.includes("remove()"));
+  assert.ok(focus.includes("no-target"));
+  assert.ok(!focus.includes("innerHTML"));
+  assert.ok(!focus.includes(".removeChild(document.body"));
+  const app = await readFile(join(root, "src", "sidepanel", "App.tsx"), "utf8");
+  assert.ok(app.includes("applyPageFocus"));
+  assert.ok(app.includes("clearPageFocus"));
+  assert.ok(app.includes("simpleMode"));
+  const status = await readFile(
+    join(root, "src", "sidepanel", "components", "chat", "PageStatusLine.tsx"),
+    "utf8",
+  );
+  assert.ok(status.includes("简洁导览"));
+  assert.ok(status.includes("原始网页"));
+  assert.ok(status.includes("aria-pressed={simpleMode}"));
 });

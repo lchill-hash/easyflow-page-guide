@@ -33,10 +33,10 @@ export function SettingsDialog({ open, onClose, uiMode, modeReady, onToggleMode,
       </div>
       <div className="ef-settings-body">
         <div className="ef-setting-row">
-          <div className="ef-setting-copy"><strong id="ef-page-access-label">切页后继续协助</strong><p id="ef-page-access-purpose">开启后，侧栏打开时，EasyFlow 可在你切换到普通网站时继续读取当前页。只读取可见内容，不会替你操作；可随时关闭。</p></div>
+          <div className="ef-setting-copy"><strong id="ef-page-access-label">切页后继续协助</strong><p id="ef-page-access-purpose">开启后，侧栏打开时，EasyFlow可在你切换到普通网站时继续读取当前页。只读取可见内容，不会替你操作；可随时关闭。</p></div>
           <button type="button" className="ef-setting-switch" role="switch" aria-checked={pageAccess.enabled} aria-labelledby="ef-page-access-label" aria-describedby="ef-page-access-purpose" disabled={!pageAccess.ready || pageAccess.busy} onClick={pageAccess.toggle}>{pageAccess.busy ? "处理中…" : !pageAccess.ready ? pageAccess.error === null ? "检查中…" : "暂不可用" : pageAccess.enabled ? "已开启" : "已关闭"}</button>
         </div>
-        <p className={`ef-settings-status${pageAccess.error !== null ? " ef-settings-status-error" : ""}`} role="status">{pageAccess.error ?? (pageAccess.enabled ? "已允许切页后继续协助。浏览器内部页、扩展商店等仍不能读取。" : "关闭时，点击浏览器工具栏中的 EasyFlow 图标，只授权并读取你主动打开的这一页。")}</p>
+        <p className={`ef-settings-status${pageAccess.error !== null ? " ef-settings-status-error" : ""}`} role="status">{pageAccess.error ?? (pageAccess.enabled ? "已允许切页后继续协助。浏览器内部页、扩展商店等仍不能读取。" : "关闭时，点击浏览器工具栏中的EasyFlow图标，只授权并读取你主动打开的这一页。")}</p>
         <div className="ef-setting-row">
           <div className="ef-setting-copy"><strong id="ef-large-label">简明大字模式</strong><p>放大文字和操作按钮；常用帮助入口始终保留在侧栏上方。</p></div>
           <button type="button" className="ef-setting-switch" role="switch" aria-checked={uiMode === "care"} aria-labelledby="ef-large-label" disabled={!modeReady} onClick={onToggleMode}>{uiMode === "care" ? "已开启" : "已关闭"}</button>

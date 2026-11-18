@@ -13,6 +13,7 @@ import { StepCard } from "./StepCard";
 import { AnswerSpeechButton } from "./StepCardSpeech";
 import { stripDuplicateStepText } from "./messageText";
 import { buildStepCardCopy } from "./stepCardCopy";
+import { WelcomeSticker } from "./WelcomeSticker";
 import { Icon } from "./Icon";
 
 interface MessageListProps {
@@ -212,9 +213,9 @@ export function MessageList({
       </div>
       {messages.length === 0 ? (
         <div className="ef-welcome">
-          <div className="ef-welcome-icon"><Icon name="message" /></div>
-          <h2 className="ef-welcome-title">这一页，<br />有什么想问的？</h2>
-          <p className="ef-welcome-description">我可以解释页面上的内容，<br />也可以一步一步陪你操作。</p>
+          <WelcomeSticker />
+          <h2 className="ef-welcome-title">这一页，有什么想问的？</h2>
+          <p className="ef-welcome-description">我可以解释页面上的内容，也可以一步一步陪你操作。</p>
           <div className="ef-welcome-prompts">
             {["这个页面讲了什么？", "我想在这个页面办事"].map((prompt) => <button type="button" className="ef-quick-option" key={prompt} onClick={() => onSend(prompt)}>{prompt}<Icon name="chevron" /></button>)}
           </div>

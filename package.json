@@ -1,9 +1,9 @@
 {
   "name": "easyflow-page-guide",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "EasyFlow 页面指引扩展：在真实网页上读取可见内容并按本地关键词定位依据。",
+  "description": "EasyFlow页面指引扩展：在真实网页上读取可见内容并按本地关键词定位依据。",
   "engines": {
     "node": ">=20"
   },

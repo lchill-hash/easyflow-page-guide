@@ -120,7 +120,7 @@ export function SeniorAssistPanel({ open, onClose, state, activeStep, onSend, on
       {state.pageSuccess === "confirmed" ? (
         <section className="ef-senior-result" role="status" aria-label="网页办理结果">
           <strong>当前网页出现预约成功提示</strong>
-          <span>请以网页当前显示为准；EasyFlow 没有替你提交或支付。</span>
+          <span>请以网页当前显示为准；EasyFlow没有替你提交或支付。</span>
           {bookingCitation !== null ? (
             <button type="button" className="ef-inline-link" onClick={() => onLocateCitation(bookingCitation)}><Icon name="target" />查看网页成功提示</button>
           ) : null}

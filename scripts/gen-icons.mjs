@@ -66,11 +66,6 @@ function insideRoundedRect(x, y, left, top, right, bottom, radius) {
 function drawPixels(size) {
   const pixels = Buffer.alloc(size * size * 4);
   const radius = Math.max(2, Math.round(size * 0.2));
-  const bars = [
-    [0.22, 0.29, 0.78, 0.37],
-    [0.22, 0.45, 0.62, 0.53],
-    [0.22, 0.61, 0.72, 0.69],
-  ];
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
       const index = (y * size + x) * 4;
@@ -82,29 +77,24 @@ function drawPixels(size) {
         pixels[index + 3] = 0;
         continue;
       }
-      pixels[index] = 79;
-      pixels[index + 1] = 70;
-      pixels[index + 2] = 229;
-      pixels[index + 3] = 255;
-      const barRadius = Math.max(1, Math.round(size * 0.04));
-      for (const [left, top, right, bottom] of bars) {
-        if (
-          insideRoundedRect(
-            x,
-            y,
-            Math.round(left * size),
-            Math.round(top * size),
-            Math.round(right * size),
-            Math.round(bottom * size),
-            barRadius,
-          )
-        ) {
-          pixels[index] = 255;
-          pixels[index + 1] = 255;
-          pixels[index + 2] = 255;
-          pixels[index + 3] = 255;
+      let covered = 0;
+      // Supersampling keeps the lower-case e readable even in the 16px toolbar icon.
+      for (let sy = 0; sy < 4; sy += 1) {
+        for (let sx = 0; sx < 4; sx += 1) {
+          const px = (x + (sx + 0.5) / 4) / size;
+          const py = (y + (sy + 0.5) / 4) / size;
+          const outer = ((px - 0.5) / 0.29) ** 2 + ((py - 0.52) / 0.29) ** 2 <= 1;
+          const inner = ((px - 0.5) / 0.17) ** 2 + ((py - 0.52) / 0.17) ** 2 < 1;
+          const opening = px > 0.68 && py > 0.54 && py < 0.72;
+          const crossbar = px >= 0.27 && px <= 0.72 && Math.abs(py - 0.52) <= 0.05;
+          if ((outer && !inner && !opening) || crossbar) covered += 1;
         }
       }
+      const mix = covered / 16;
+      pixels[index] = Math.round(91 + 164 * mix);
+      pixels[index + 1] = Math.round(66 + 189 * mix);
+      pixels[index + 2] = Math.round(237 + 18 * mix);
+      pixels[index + 3] = 255;
     }
   }
   return pixels;

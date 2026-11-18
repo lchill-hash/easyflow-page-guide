@@ -3,11 +3,14 @@ import { Icon } from "./Icon";
 
 interface PageStatusLineProps {
   state: ConversationState;
+  simpleMode: boolean;
+  simpleHint: string | null;
+  onToggleSimple: () => void;
   onRefresh: () => void;
   onOpenSettings: () => void;
 }
 
-export function PageStatusLine({ state, onRefresh, onOpenSettings }: PageStatusLineProps) {
+export function PageStatusLine({ state, simpleMode, simpleHint, onToggleSimple, onRefresh, onOpenSettings }: PageStatusLineProps) {
   const blocked = state.phase === "read-blocked";
   const needsAccess = blocked && state.readErrorCode === "EF-E003";
   const restricted = blocked && state.readErrorCode === "EF-E002";
@@ -31,9 +34,13 @@ export function PageStatusLine({ state, onRefresh, onOpenSettings }: PageStatusL
       <span className={blocked ? "ef-status-dot ef-status-dot-error" : "ef-status-dot"} aria-hidden="true" />
       <div className="ef-page-status-copy">
         <span className="ef-page-status-text" role="status">{text}</span>
-        {needsAccess ? <><button type="button" className="ef-page-access-action" onClick={onOpenSettings}>开启切页自动读取</button><p className="ef-page-status-note">也可点击浏览器工具栏中的 EasyFlow 图标，只读取这一页。</p></> : null}
+        {needsAccess ? <><button type="button" className="ef-page-access-action" onClick={onOpenSettings}>开启切页自动读取</button><p className="ef-page-status-note">也可点击浏览器工具栏中的EasyFlow图标，只读取这一页。</p></> : null}
         {restricted ? <p className="ef-page-status-note">浏览器内部页、扩展商店等不支持读取，请切换到普通网页。</p> : null}
+        {simpleHint !== null ? <p className="ef-page-status-note">{simpleHint}</p> : null}
       </div>
+      <button type="button" className="ef-simple-toggle" aria-pressed={simpleMode} onClick={onToggleSimple}>
+        {simpleMode ? "原始网页" : "简洁导览"}
+      </button>
       <button type="button" className="ef-icon-button" aria-label="重新读取当前页面" title="重新读取当前页面" disabled={state.busy} onClick={onRefresh}><Icon name="refresh" /></button>
     </div>
   );
